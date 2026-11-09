@@ -48,6 +48,7 @@ func _ready() -> void:
 	add_to_group(&"enemies")
 	collision_layer = ENEMY_LAYER
 	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER
+	floor_max_angle = deg_to_rad(60.0)
 	_rng.randomize()
 	_home = global_position
 	_wander_target = _home

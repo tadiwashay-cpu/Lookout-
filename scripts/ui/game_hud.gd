@@ -7,6 +7,7 @@ var _health_bar: ProgressBar
 var _objective: Label
 var _banner: Label
 var _wanted: WantedStars
+var _banner_tween: Tween
 
 
 func _ready() -> void:
@@ -53,10 +54,12 @@ func bind_challenge(challenge: CleanHandsChallenge) -> void:
 func show_banner(text: String, hold: float, font_size: int = 72) -> void:
 	_banner.text = text
 	_banner.add_theme_font_size_override("font_size", font_size)
-	var tween := create_tween()
-	tween.tween_property(_banner, "modulate:a", 1.0, 0.2)
-	tween.tween_interval(hold)
-	tween.tween_property(_banner, "modulate:a", 0.0, 0.5)
+	if _banner_tween:
+		_banner_tween.kill()
+	_banner_tween = create_tween()
+	_banner_tween.tween_property(_banner, "modulate:a", 1.0, 0.2)
+	_banner_tween.tween_interval(hold)
+	_banner_tween.tween_property(_banner, "modulate:a", 0.0, 0.5)
 
 
 func _on_health_changed(current: float, maximum: float) -> void:

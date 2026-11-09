@@ -9,6 +9,8 @@ extends Node3D
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const GOON_SCENE := preload("res://scenes/characters/goon.tscn")
+## Low enough that characters walk straight up it (no step-up in CharacterBody3D).
+const SIDEWALK_HEIGHT := 0.1
 
 @export var blocks_x: int = 5
 @export var blocks_z: int = 5
@@ -173,7 +175,7 @@ func _build_blocks() -> void:
 		for iz in blocks_z:
 			var center := _block_center(ix, iz)
 			# Sidewalk slab + curb.
-			_add_solid(Vector3(block_size, 0.18, block_size), center + Vector3(0, 0.09, 0), _mat["sidewalk"])
+			_add_solid(Vector3(block_size, SIDEWALK_HEIGHT, block_size), center + Vector3(0, SIDEWALK_HEIGHT * 0.5, 0), _mat["sidewalk"])
 			# Downtown is taller toward the middle of the grid.
 			var centrality := 1.0 - Vector2(ix - (blocks_x - 1) * 0.5, iz - (blocks_z - 1) * 0.5).length() / max_dist
 			if _rng.randf() < 0.12:
@@ -195,7 +197,7 @@ func _build_lots(center: Vector3, centrality: float) -> void:
 			height = maxf(height, 7.0)
 			_build_building(lot_center, Vector2(lot, lot) * _rng.randf_range(0.82, 1.0), height)
 	if _rng.randf() < 0.7:
-		var dumpster_pos := center + Vector3(_rng.randf_range(-6, 6), 0.18, alley * 0.25)
+		var dumpster_pos := center + Vector3(_rng.randf_range(-6, 6), SIDEWALK_HEIGHT, alley * 0.25)
 		_add_solid(Vector3(2.0, 1.4, 1.1), dumpster_pos + Vector3(0, 0.7, 0), _mat["dumpster"])
 
 
@@ -203,11 +205,11 @@ func _build_building(base: Vector3, footprint: Vector2, height: float) -> void:
 	var facades: Array = _mat["facades"]
 	var facade: Material = facades[_rng.randi() % facades.size()]
 	var size := Vector3(footprint.x, height, footprint.y)
-	_add_solid(size, base + Vector3(0, 0.18 + height * 0.5, 0), facade)
+	_add_solid(size, base + Vector3(0, SIDEWALK_HEIGHT + height * 0.5, 0), facade)
 	# Recessed dark ground-floor storefront band.
 	_add_visual(Vector3(footprint.x + 0.06, 3.6, footprint.y + 0.06), base + Vector3(0, 2.0, 0), _mat["storefront"])
 	# Cornice / parapet cap.
-	_add_visual(Vector3(footprint.x + 0.5, 0.6, footprint.y + 0.5), base + Vector3(0, 0.18 + height + 0.3, 0), _mat["roof"])
+	_add_visual(Vector3(footprint.x + 0.5, 0.6, footprint.y + 0.5), base + Vector3(0, SIDEWALK_HEIGHT + height + 0.3, 0), _mat["roof"])
 	# Older low-rise brick gets rooftop water tanks.
 	if height < 26.0 and _rng.randf() < 0.35:
 		var tank := MeshInstance3D.new()
@@ -224,7 +226,7 @@ func _build_building(base: Vector3, footprint: Vector2, height: float) -> void:
 ## Occasional open market square — a natural arena for fights.
 func _build_square(center: Vector3) -> void:
 	for i in 6:
-		var stall := center + Vector3(_rng.randf_range(-14, 14), 0.18, _rng.randf_range(-14, 14))
+		var stall := center + Vector3(_rng.randf_range(-14, 14), SIDEWALK_HEIGHT, _rng.randf_range(-14, 14))
 		_add_solid(Vector3(3.0, 1.0, 1.6), stall + Vector3(0, 0.5, 0), _mat["metal"])
 		_add_visual(Vector3(3.4, 0.1, 2.2), stall + Vector3(0, 2.3, 0), (_mat["cars"] as Array)[i % 5])
 
@@ -298,7 +300,7 @@ func _spawn_goons(challenge: CleanHandsChallenge) -> void:
 		var spot := _block_center(ix, iz) - Vector3(_pitch * 0.5, 0, _pitch * 0.5)
 		if spot.distance_to(player_pos) < 25.0:
 			continue
-		for i in goons_per_squad:
+		for _i in goons_per_squad:
 			var goon := GOON_SCENE.instantiate() as Goon
 			goon.position = spot + Vector3(_rng.randf_range(-3, 3), 0.2, _rng.randf_range(-3, 3))
 			add_child(goon)

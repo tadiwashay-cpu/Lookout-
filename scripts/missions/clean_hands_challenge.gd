@@ -48,7 +48,7 @@ func _on_goon_defeated(_goon: Goon) -> void:
 
 func _on_attack_landed(_target: Node3D, _damage: float, combo_step: int) -> void:
 	# A finisher that hits three goons at once still only counts once.
-	if combo_step == 3 and Engine.get_physics_frames() != _last_finisher_frame:
+	if combo_step >= 3 and Engine.get_physics_frames() != _last_finisher_frame:
 		_last_finisher_frame = Engine.get_physics_frames()
 		_finishers += 1
 		_check_complete()
@@ -66,7 +66,7 @@ func _check_complete() -> void:
 		return
 	if _goons_down >= goons_required and _finishers >= finishers_required:
 		is_complete = true
-		var minutes := int(_elapsed) / 60
+		var minutes := floori(_elapsed / 60.0)
 		var seconds := int(_elapsed) % 60
 		completed.emit("DISTRICT CLEARED   %d:%02d" % [minutes, seconds])
 

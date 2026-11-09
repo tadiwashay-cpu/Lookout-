@@ -30,6 +30,24 @@ func _ready() -> void:
 	_layout()
 
 
+func _notification(what: int) -> void:
+	# Android: if the app loses focus mid-touch we never get the release events.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED \
+			or what == NOTIFICATION_VISIBILITY_CHANGED:
+		_release_all()
+
+
+func _release_all() -> void:
+	for button in _buttons:
+		Input.action_release(button["action"])
+	for action: StringName in [&"move_left", &"move_right", &"move_forward", &"move_back", &"sprint"]:
+		Input.action_release(action)
+	_button_touches.clear()
+	_joy_index = -1
+	_look_index = -1
+	queue_redraw()
+
+
 func _layout() -> void:
 	var s := size
 	_buttons = [

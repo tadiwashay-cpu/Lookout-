@@ -100,6 +100,7 @@ func _ready() -> void:
 	collision_layer = PLAYER_LAYER
 	collision_mask = WORLD_LAYER | ENEMY_LAYER
 	floor_snap_length = 0.3
+	floor_max_angle = deg_to_rad(60.0)
 	_spawn_point = global_position
 	_yaw = rotation.y
 	rotation = Vector3.ZERO
@@ -121,6 +122,11 @@ func _ready() -> void:
 
 
 # ---------------------------------------------------------------- input / look
+
+func _exit_tree() -> void:
+	# A hit-stop interrupted by a scene change must not leave the game in slow motion.
+	Engine.time_scale = 1.0
+
 
 func is_alive() -> bool:
 	return not health.is_dead
@@ -328,7 +334,8 @@ func _perform_hit() -> void:
 			continue
 		var knockback := forward * (7.0 if _is_finisher() else 2.5)
 		target.take_hit(_attack_damage, knockback, self, _is_finisher())
-		attack_landed.emit(target, _attack_damage, _combo_step)
+		# Heavy punches count as finishers too (reported as the final combo step).
+		attack_landed.emit(target, _attack_damage, light_damage.size() if _is_finisher() else _combo_step)
 		landed = true
 
 	if landed:
