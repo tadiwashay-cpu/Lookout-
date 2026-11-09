@@ -31,6 +31,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 	resized.connect(_layout)
+	get_viewport().size_changed.connect(_layout)
 	if player:
 		player.vehicle_changed.connect(_on_vehicle_changed)
 		player.nearby_vehicle_changed.connect(_on_nearby_vehicle_changed)
@@ -71,8 +72,18 @@ func _release_all() -> void:
 	queue_redraw()
 
 
+## Screen size in the same coordinates touch events use.
+func _screen() -> Vector2:
+	return get_viewport().get_visible_rect().size
+
+
+func _joy_home() -> Vector2:
+	var s := _screen()
+	return Vector2(clampf(s.x * 0.15, 200.0, 320.0), s.y - 240.0)
+
+
 func _layout() -> void:
-	var s := size
+	var s := _screen()
 	if _in_vehicle:
 		_buttons = [
 			{"action": &"move_forward", "label": "GAS", "pos": Vector2(s.x - 190, s.y - 190), "r": 100.0},
@@ -123,12 +134,17 @@ func _on_touch_down(index: int, pos: Vector2) -> void:
 			Input.action_press(button["action"])
 			queue_redraw()
 			return
-	if pos.x < size.x * 0.45 and _joy_index == -1:
+	var half := _screen().x * 0.45
+	if pos.x < half and _joy_index == -1:
 		_joy_index = index
-		_joy_origin = pos
+		# Touching on the drawn stick starts from its centre; elsewhere it floats.
+		_joy_origin = _joy_home() if pos.distance_to(_joy_home()) <= JOY_RADIUS else pos
 		_joy_knob = pos
+		var offset := (pos - _joy_origin).limit_length(JOY_RADIUS)
+		_joy_knob = _joy_origin + offset
+		_apply_move(offset / JOY_RADIUS)
 		queue_redraw()
-	elif pos.x >= size.x * 0.45 and _look_index == -1:
+	elif pos.x >= half and _look_index == -1:
 		_look_index = index
 
 
@@ -187,8 +203,16 @@ func _draw() -> void:
 		draw_arc(_joy_origin, JOY_RADIUS, 0.0, TAU, 48, Color(light, 0.35), 3.0, true)
 		draw_circle(_joy_knob, 52.0, Color(light, 0.55))
 	else:
-		var hint := Vector2(260, size.y - 240)
-		draw_arc(hint, JOY_RADIUS, 0.0, TAU, 48, Color(light, 0.15), 3.0, true)
+		# Always show where the stick is so it's obvious how to move.
+		var home := _joy_home()
+		draw_circle(home, JOY_RADIUS, Color(1, 1, 1, 0.06))
+		draw_arc(home, JOY_RADIUS, 0.0, TAU, 48, Color(light, 0.4), 3.0, true)
+		draw_circle(home, 52.0, Color(light, 0.35))
+		var font_size := 20
+		var move_text := "STEER" if _in_vehicle else "MOVE"
+		var text_w := font.get_string_size(move_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		draw_string(font, home + Vector2(-text_w * 0.5, JOY_RADIUS + 34), move_text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(light, 0.6))
 
 	for button in _buttons:
 		var center: Vector2 = button["pos"]

@@ -100,6 +100,7 @@ var _buffered_attack: StringName = &""
 var _buffer_timer := 0.0
 
 var _dodge_timer := 0.0
+var _hurt_timer := 0.0
 var _dodge_cooldown_timer := 0.0
 var _dodge_dir := Vector3.ZERO
 
@@ -256,6 +257,7 @@ func _tick_timers(delta: float) -> void:
 	_dodge_timer = maxf(_dodge_timer - delta, 0.0)
 	_dodge_cooldown_timer = maxf(_dodge_cooldown_timer - delta, 0.0)
 	_buffer_timer = maxf(_buffer_timer - delta, 0.0)
+	_hurt_timer = maxf(_hurt_timer - delta, 0.0)
 	if _buffer_timer <= 0.0:
 		_buffered_attack = &""
 
@@ -278,13 +280,15 @@ func _update_model(move_dir: Vector3, delta: float) -> void:
 		_model_yaw = lerp_angle(_model_yaw, target_yaw, clampf(turn_speed * delta, 0.0, 1.0))
 	_model.rotation.y = _model_yaw
 
-	if _attacking or _dodge_timer > 0.0:
+	if _attacking or _dodge_timer > 0.0 or _hurt_timer > 0.0:
 		return
 	var speed := Vector3(velocity.x, 0.0, velocity.z).length()
-	if speed > run_speed + 0.5:
-		_play_anim(&"run")
+	# Scale playback so feet keep pace with the ground (clips are authored
+	# for ~2.4 m/s walking and ~6 m/s running).
+	if speed > 4.0:
+		_play_anim(&"run", clampf(speed / 6.0, 0.8, 1.6))
 	elif speed > 0.3:
-		_play_anim(&"walk")
+		_play_anim(&"walk", clampf(speed / 2.4, 0.6, 1.7))
 	else:
 		_play_anim(&"idle")
 
@@ -412,7 +416,9 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 	GameSettings.vibrate(40)
 	if heavy:
 		_attacking = false
-	_play_anim(&"hit")
+	if not _attacking:
+		_hurt_timer = 0.3
+		_play_anim(&"hit")
 
 
 func _on_died() -> void:
@@ -567,6 +573,10 @@ func _build_model() -> void:
 		var players := holder.find_children("*", "AnimationPlayer", true, false)
 		if not players.is_empty():
 			_anim_player = players[0] as AnimationPlayer
+			for clip: StringName in [&"idle", &"walk", &"run"]:
+				if _anim_player.has_animation(clip):
+					_anim_player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+			_anim_player.play(&"idle")
 		return
 	_build_placeholder_body()
 
@@ -666,11 +676,13 @@ func _add_box(size: Vector3, pos: Vector3, material: Material) -> MeshInstance3D
 
 # ------------------------------------------------------------------ animation
 
-func _play_anim(anim_name: StringName) -> bool:
+func _play_anim(anim_name: StringName, speed: float = 1.0) -> bool:
 	if _anim_player == null or not _anim_player.has_animation(anim_name):
 		return false
+	_anim_player.speed_scale = speed
 	if _anim_player.current_animation != anim_name:
-		_anim_player.play(anim_name, 0.12)
+		var is_action := not (anim_name in [&"idle", &"walk", &"run"])
+		_anim_player.play(anim_name, 0.06 if is_action else 0.15)
 	return true
 
 

@@ -3,13 +3,25 @@
 Concept: `docs/concept/hero_concept_front.jpg` (front T-pose).
 
 ## Status
-`assets/models/hero/hero.glb` is in and used by the player. It's an
-image-to-3D mesh: about 282k triangles, **no skeleton**, so it's a
-static T-pose for now. Punches play a body lunge. Next steps:
-1. **Rig it.** Mixamo only takes FBX/OBJ, so convert first (Blender on
-   a PC: import glb, then export fbx).
-2. **Decimate to about 40k triangles** for mobile. Godot also makes
-   distance LODs automatically on import.
+`assets/models/hero/hero.glb` is **rigged and animated**, and the player uses it.
+- **Mesh:** reduced from 282k to about 40k triangles for mobile with
+  `tools/decimate_hero.py`. Textures are 2048² base colour and 1024²
+  metal/rough.
+- **Rig:** 19-bone humanoid made by `tools/rig_hero.py`, fitted to his
+  proportions, with automatic skin weights. Left/right and body regions
+  are masked so the legs don't pull on each other.
+- **Clips:** idle, walk, run, punch_1, punch_2, punch_3, punch_heavy,
+  dodge, hit, knocked_out. These are hand-authored procedural motion,
+  good enough to play with.
+
+To redo it (for example after editing the mesh): run
+`python tools/decimate_hero.py source.glb hero_40k.glb 40000`, then
+`python tools/rig_hero.py hero_40k.glb assets/models/hero/hero.glb`.
+Pose and timing tweaks go in `rig_hero.py` (`CLIPS`).
+
+Later upgrade: a professional rig with motion-captured animation
+(Mixamo or similar) will look better. The game picks it up the same way
+as long as the clip names match.
 
 ## 1. Turn the concept into a 3D model
 Choose one:
