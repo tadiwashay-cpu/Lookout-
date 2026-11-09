@@ -1,0 +1,13 @@
+; Engine configuration file.
+; Open this folder in Godot 4 (Project Manager > Import) to start editing.
+
+config_version=5
+
+[application]
+
+config/name="Lookout"
+config/features=PackedStringArray("4.4", "Forward Plus")
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

@@ -1,0 +1,23 @@
+# Normalize text files; keep Godot text resources diff-friendly
+* text=auto eol=lf
+*.gd text
+*.tscn text
+*.tres text
+*.godot text
+
+# Binary assets
+*.glb binary
+*.gltf text
+*.fbx binary
+*.obj binary
+*.blend binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.exr binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.ttf binary
+*.otf binary
