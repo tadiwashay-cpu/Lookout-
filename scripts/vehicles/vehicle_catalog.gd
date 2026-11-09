@@ -8,14 +8,16 @@ extends RefCounted
 ## (see CREDITS.md). Split into per-car files by tools/split_cars.py.
 
 const RANK_STATS := {
-	# engine: total drive force (N) for a 1300 kg car; scaled by mass.
+	# engine: Godot VehicleBody3D units, per driven wheel of a 2-wheel-drive
+	# 1000 kg car (Godot docs: 25-50 is a sensible range). Scaled by mass
+	# and split across driven wheels in DrivableCar. brake: same units.
 	# top_speed: m/s (x3.6 for km/h). grip: tyre friction slip.
 	# spawn_weight: relative chance to appear parked in the city.
-	"D": {"engine": 4200.0, "top_speed": 36.0, "brake": 38.0, "steer": 0.52, "grip": 2.6, "health": 600.0, "spawn_weight": 30.0},
-	"C": {"engine": 5200.0, "top_speed": 42.0, "brake": 42.0, "steer": 0.54, "grip": 2.8, "health": 700.0, "spawn_weight": 30.0},
-	"B": {"engine": 6400.0, "top_speed": 47.0, "brake": 46.0, "steer": 0.55, "grip": 3.0, "health": 800.0, "spawn_weight": 14.0},
-	"A": {"engine": 8200.0, "top_speed": 58.0, "brake": 52.0, "steer": 0.57, "grip": 3.4, "health": 850.0, "spawn_weight": 5.0},
-	"S": {"engine": 10800.0, "top_speed": 72.0, "brake": 60.0, "steer": 0.6, "grip": 3.9, "health": 900.0, "spawn_weight": 1.0},
+	"D": {"engine": 30.0, "top_speed": 36.0, "brake": 22.0, "steer": 0.52, "grip": 2.6, "health": 600.0, "spawn_weight": 30.0},
+	"C": {"engine": 38.0, "top_speed": 42.0, "brake": 24.0, "steer": 0.54, "grip": 2.8, "health": 700.0, "spawn_weight": 30.0},
+	"B": {"engine": 46.0, "top_speed": 47.0, "brake": 26.0, "steer": 0.55, "grip": 3.0, "health": 800.0, "spawn_weight": 14.0},
+	"A": {"engine": 58.0, "top_speed": 58.0, "brake": 28.0, "steer": 0.57, "grip": 3.4, "health": 850.0, "spawn_weight": 5.0},
+	"S": {"engine": 75.0, "top_speed": 72.0, "brake": 30.0, "steer": 0.6, "grip": 3.9, "health": 900.0, "spawn_weight": 1.0},
 }
 
 ## drive: "rwd" | "fwd" | "awd"

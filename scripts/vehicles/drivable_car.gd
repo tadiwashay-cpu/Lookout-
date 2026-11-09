@@ -53,10 +53,11 @@ func _ready() -> void:
 	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, 0.42, 0.0)
-	contact_monitor = true
+	contact_monitor = false   # only while driven (mobile perf)
 	max_contacts_reported = 4
 	body_entered.connect(_on_body_entered)
 	can_sleep = true
+	set_process(false)
 	_build_from_model()
 	if is_police and paint.a == 0.0:
 		paint = VehicleCatalog.POLICE_PAINT.get(vehicle_id, Color(0.05, 0.05, 0.06))
@@ -118,6 +119,7 @@ func _build_from_model() -> void:
 		(_front_wheels if is_front else _rear_wheels).append(wheel)
 		if wheel.use_as_traction:
 			_traction_count += 1
+		wheel.brake = float(data["brake"]) * 0.5   # parked: handbrake on
 
 
 func _add_body_collision(body_mesh: MeshInstance3D) -> void:
@@ -198,6 +200,8 @@ func enter(player: PlayerController) -> void:
 	driver = player
 	_entered_frame = Engine.get_physics_frames()
 	sleeping = false
+	contact_monitor = true
+	set_process(true)
 	if not has_been_stolen:
 		has_been_stolen = true
 		var severity := WantedSystem.CRIME_POLICE_VEHICLE_THEFT if is_police else WantedSystem.CRIME_VEHICLE_THEFT
@@ -225,11 +229,38 @@ func exit() -> void:
 	if _camera:
 		_camera.queue_free()
 		_camera = null
-	# Driver's door: the car's left, which is +X because the body faces +Z.
-	var exit_spot := global_position + global_basis.x * 1.8 + Vector3.UP * 0.4
-	player.stop_driving(exit_spot, atan2(global_basis.z.x, global_basis.z.z) + PI)
+	contact_monitor = false
+	set_process(false)
+	player.stop_driving(_find_exit_spot(), atan2(global_basis.z.x, global_basis.z.z) + PI)
 	driver_exited.emit(player)
 	_set_light_bar(0.0)
+
+
+## Driver's door first (the car's left = +X, since the body faces +Z), then
+## passenger side, behind, in front, and finally the roof.
+func _find_exit_spot() -> Vector3:
+	var flat_x := Vector3(global_basis.x.x, 0.0, global_basis.x.z).normalized()
+	var flat_z := Vector3(global_basis.z.x, 0.0, global_basis.z.z).normalized()
+	var candidates: Array[Vector3] = [
+		global_position + flat_x * 1.9,
+		global_position - flat_x * 1.9,
+		global_position - flat_z * 3.4,
+		global_position + flat_z * 3.4,
+	]
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.38
+	capsule.height = 1.85
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = capsule
+	params.collision_mask = WORLD_LAYER | VEHICLE_LAYER
+	params.exclude = [get_rid()]
+	var space := get_world_3d().direct_space_state
+	for spot in candidates:
+		var feet := Vector3(spot.x, global_position.y + 0.2, spot.z)
+		params.transform = Transform3D(Basis(), feet + Vector3.UP * 0.95)
+		if space.intersect_shape(params, 1).is_empty():
+			return feet
+	return global_position + Vector3.UP * (_roof_height + 0.6)
 
 
 ## Orbit the chase camera (drag on the right side of the screen).
@@ -247,6 +278,9 @@ func _physics_process(delta: float) -> void:
 		return
 	driver.global_position = global_position + Vector3.UP * 0.5
 
+	if Input.is_action_just_pressed(&"toggle_camera"):
+		GameSettings.toggle_camera_mode()
+
 	# Same press that got us in must not also get us out.
 	if Input.is_action_just_pressed(&"interact") and Engine.get_physics_frames() != _entered_frame:
 		exit()
@@ -257,8 +291,8 @@ func _physics_process(delta: float) -> void:
 	var steer_input := Input.get_axis(&"move_right", &"move_left")
 	var speed := forward_speed()
 	var top_speed: float = data["top_speed"]
-	var engine_total: float = float(data["engine"]) * float(data["mass"]) / 1300.0
-	var per_wheel_engine := engine_total / maxf(_traction_count, 1)
+	# Catalog values are per wheel for a 2WD 1000 kg car; AWD splits the same total.
+	var per_wheel_engine: float = float(data["engine"]) * float(data["mass"]) / 1000.0 * 2.0 / maxf(_traction_count, 1)
 	var brake_force: float = data["brake"]
 
 	var engine := 0.0
@@ -294,7 +328,6 @@ func _physics_process(delta: float) -> void:
 
 	if is_police:
 		_siren_time += delta
-		_set_light_bar(1.0)
 
 
 func _process(delta: float) -> void:

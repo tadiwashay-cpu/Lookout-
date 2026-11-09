@@ -259,6 +259,7 @@ func _build_streetlights(center: Vector3) -> void:
 		var pos := center + (Vector3(along, 0, offset * side) if horizontal else Vector3(offset * side, 0, along))
 		if _is_reserved(pos):
 			continue
+		_reserved.append(pos)   # keep later cars ~8 m away from this one
 		var id := VehicleCatalog.pick_civilian(_rng)
 		if id == "sport":
 			id = "coupe"   # the S-class car only exists at its hidden spot

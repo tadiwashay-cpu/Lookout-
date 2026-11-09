@@ -141,6 +141,11 @@ func is_alive() -> bool:
 	return not health.is_dead
 
 
+## Goons ignore a player who is inside a car.
+func is_targetable() -> bool:
+	return is_alive() and current_vehicle == null
+
+
 ## Called by TouchControls (drag on the right half of the screen).
 func add_look_input(delta_px: Vector2) -> void:
 	if current_vehicle:
@@ -399,7 +404,7 @@ func _face_nearest_enemy() -> void:
 
 ## Hits from goons, police, etc.
 func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool = false) -> void:
-	if health.is_dead or _dodge_timer > 0.0:
+	if health.is_dead or _dodge_timer > 0.0 or current_vehicle:
 		return
 	health.take_damage(damage, attacker)
 	velocity += knockback
@@ -411,6 +416,8 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 
 
 func _on_died() -> void:
+	if current_vehicle:
+		current_vehicle.exit()
 	_attacking = false
 	_play_anim(&"knocked_out")
 	if _anim_player == null:
@@ -453,6 +460,10 @@ func start_driving(car: DrivableCar) -> void:
 	nearby_vehicle = null
 	nearby_vehicle_changed.emit(null)
 	_attacking = false
+	_dodge_timer = 0.0
+	_combo_step = 0
+	_combo_window = 0.0
+	_buffered_attack = &""
 	velocity = Vector3.ZERO
 	visible = false
 	collision_layer = 0
@@ -567,7 +578,7 @@ func _fit_model_height(instance: Node3D) -> void:
 	if bounds.size.y <= 0.001:
 		return
 	var s := model_height / bounds.size.y
-	instance.scale = Vector3.ONE * s
+	instance.scale *= s
 	instance.position = Vector3(-bounds.get_center().x * s, -bounds.position.y * s, -bounds.get_center().z * s)
 
 

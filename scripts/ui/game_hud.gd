@@ -10,6 +10,7 @@ var _wanted: WantedStars
 var _banner_tween: Tween
 var _speed: Label
 var _hint: Label
+var _hint_tween: Tween
 var _player: PlayerController
 
 
@@ -60,10 +61,12 @@ func _process(_delta: float) -> void:
 
 func show_hint(text: String) -> void:
 	_hint.text = text
-	var tween := create_tween()
-	tween.tween_property(_hint, "modulate:a", 1.0, 0.15)
-	tween.tween_interval(2.5)
-	tween.tween_property(_hint, "modulate:a", 0.0, 0.4)
+	if _hint_tween:
+		_hint_tween.kill()
+	_hint_tween = create_tween()
+	_hint_tween.tween_property(_hint, "modulate:a", 1.0, 0.15)
+	_hint_tween.tween_interval(2.5)
+	_hint_tween.tween_property(_hint, "modulate:a", 0.0, 0.4)
 
 
 func bind_player(player: PlayerController) -> void:

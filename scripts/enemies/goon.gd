@@ -160,7 +160,7 @@ func _tick_windup(delta: float) -> void:
 	if _state_time < windup_time:
 		return
 	_body_material.emission = Color.BLACK
-	if _player and _player.is_alive():
+	if _player and _player.is_targetable():
 		var to_player := _player.global_position - global_position
 		to_player.y = 0.0
 		var forward := -_model.global_basis.z
@@ -215,7 +215,7 @@ func _set_state(new_state: State) -> void:
 
 
 func _player_in_range(range_m: float) -> bool:
-	if _player == null or not _player.is_alive():
+	if _player == null or not _player.is_targetable():
 		return false
 	return global_position.distance_to(_player.global_position) <= range_m
 

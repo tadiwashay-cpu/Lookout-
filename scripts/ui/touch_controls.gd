@@ -38,9 +38,14 @@ func _ready() -> void:
 
 
 func _on_vehicle_changed(vehicle: DrivableCar) -> void:
-	_release_all()
+	# Keep the thumb on the joystick: drop only the pedal/move actions, then
+	# re-apply the stick under the new mode (steer-only in a car).
+	for action: StringName in [&"move_left", &"move_right", &"move_forward", &"move_back", &"sprint"]:
+		Input.action_release(action)
 	_in_vehicle = vehicle != null
 	_layout()
+	if _joy_index != -1:
+		_apply_move((_joy_knob - _joy_origin) / JOY_RADIUS)
 
 
 func _on_nearby_vehicle_changed(vehicle: DrivableCar) -> void:
@@ -68,10 +73,6 @@ func _release_all() -> void:
 
 func _layout() -> void:
 	var s := size
-	# Release anything held by buttons that are about to disappear.
-	for index: int in _button_touches:
-		Input.action_release(_button_touches[index])
-	_button_touches.clear()
 	if _in_vehicle:
 		_buttons = [
 			{"action": &"move_forward", "label": "GAS", "pos": Vector2(s.x - 190, s.y - 190), "r": 100.0},
@@ -90,6 +91,14 @@ func _layout() -> void:
 		]
 		if _can_interact:
 			_buttons.append({"action": &"interact", "label": "ENTER", "pos": Vector2(s.x - 560, s.y - 300), "r": 70.0})
+	# Release only held buttons whose action no longer exists in this layout.
+	var available: Array[StringName] = []
+	for button in _buttons:
+		available.append(button["action"])
+	for index: int in _button_touches.keys():
+		if not available.has(_button_touches[index]):
+			Input.action_release(_button_touches[index])
+			_button_touches.erase(index)
 	queue_redraw()
 
 
