@@ -17,7 +17,8 @@ const CRIME_VIGILANTE_CAP := 1
 const CRIME_ASSAULT_CIVILIAN := 45.0
 const CRIME_ASSAULT_POLICE := 90.0
 const CRIME_GUNFIRE := 60.0
-const CRIME_VEHICLE_THEFT := 70.0
+const CRIME_VEHICLE_THEFT := 35.0
+const CRIME_POLICE_VEHICLE_THEFT := 120.0
 
 var heat: float = 0.0
 var stars: int = 0

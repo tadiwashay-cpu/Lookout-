@@ -8,6 +8,9 @@ var _objective: Label
 var _banner: Label
 var _wanted: WantedStars
 var _banner_tween: Tween
+var _speed: Label
+var _hint: Label
+var _player: PlayerController
 
 
 func _ready() -> void:
@@ -38,8 +41,34 @@ func _ready() -> void:
 	_banner.modulate.a = 0.0
 	root.add_child(_banner)
 
+	_speed = _make_label(54, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(_speed, Control.PRESET_CENTER_BOTTOM, -200, -110, 200, -30)
+	_speed.visible = false
+	root.add_child(_speed)
+
+	_hint = _make_label(30, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(_hint, Control.PRESET_CENTER_BOTTOM, -600, -200, 600, -130)
+	_hint.modulate.a = 0.0
+	root.add_child(_hint)
+
+
+func _process(_delta: float) -> void:
+	if _player and _player.current_vehicle:
+		var kmh := absf(_player.current_vehicle.forward_speed()) * 3.6
+		_speed.text = "%d km/h" % roundi(kmh)
+
+
+func show_hint(text: String) -> void:
+	_hint.text = text
+	var tween := create_tween()
+	tween.tween_property(_hint, "modulate:a", 1.0, 0.15)
+	tween.tween_interval(2.5)
+	tween.tween_property(_hint, "modulate:a", 0.0, 0.4)
+
 
 func bind_player(player: PlayerController) -> void:
+	_player = player
+	player.vehicle_changed.connect(func(vehicle: DrivableCar) -> void: _speed.visible = vehicle != null)
 	player.health.health_changed.connect(_on_health_changed)
 	_on_health_changed(player.health.current, player.health.max_health)
 	player.knocked_out.connect(func() -> void: show_banner("KNOCKED OUT", 2.5))
@@ -49,6 +78,7 @@ func bind_challenge(challenge: CleanHandsChallenge) -> void:
 	challenge.objectives_changed.connect(func(text: String) -> void: _objective.text = text)
 	challenge.completed.connect(func(summary: String) -> void: show_banner(summary, 6.0))
 	challenge.failed.connect(func(reason: String) -> void: show_banner(reason, 4.0, 36))
+	challenge.hint.connect(show_hint)
 
 
 func show_banner(text: String, hold: float, font_size: int = 72) -> void:

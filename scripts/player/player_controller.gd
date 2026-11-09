@@ -12,11 +12,15 @@ extends CharacterBody3D
 signal attack_landed(target: Node3D, damage: float, combo_step: int)
 signal knocked_out
 signal respawned
+signal vehicle_changed(vehicle: DrivableCar)
+signal nearby_vehicle_changed(vehicle: DrivableCar)
 
 const WORLD_LAYER := 1
 const PLAYER_LAYER := 2
 const ENEMY_LAYER := 4
+const VEHICLE_LAYER := 32
 const LOOK_SCALE := 0.0045
+const INTERACT_RANGE := 3.4
 
 @export_group("Movement")
 @export var run_speed: float = 6.0
@@ -57,8 +61,13 @@ const LOOK_SCALE := 0.0045
 @export var model_scene: PackedScene
 ## Imported glTF characters usually face +Z; Godot's forward is -Z.
 @export var model_yaw_offset_deg: float = 180.0
+## The model is scaled so its height matches this (metres), feet on the ground.
+@export var model_height: float = 1.85
 
 var health: HealthComponent
+var current_vehicle: DrivableCar
+var nearby_vehicle: DrivableCar
+var _left_vehicle_frame := -1
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _spawn_point: Vector3
@@ -98,7 +107,7 @@ var _dodge_dir := Vector3.ZERO
 func _ready() -> void:
 	add_to_group(&"player")
 	collision_layer = PLAYER_LAYER
-	collision_mask = WORLD_LAYER | ENEMY_LAYER
+	collision_mask = WORLD_LAYER | ENEMY_LAYER | VEHICLE_LAYER
 	floor_snap_length = 0.3
 	floor_max_angle = deg_to_rad(60.0)
 	_spawn_point = global_position
@@ -134,6 +143,9 @@ func is_alive() -> bool:
 
 ## Called by TouchControls (drag on the right half of the screen).
 func add_look_input(delta_px: Vector2) -> void:
+	if current_vehicle:
+		current_vehicle.add_look_input(delta_px)
+		return
 	var s := LOOK_SCALE * GameSettings.look_sensitivity
 	_rotate_view(-delta_px.x * s, -delta_px.y * s)
 
@@ -141,7 +153,10 @@ func add_look_input(delta_px: Vector2) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion := event as InputEventMouseMotion
-		_rotate_view(-motion.relative.x * mouse_sensitivity, -motion.relative.y * mouse_sensitivity)
+		if current_vehicle:
+			current_vehicle.add_look_input(motion.relative)
+		else:
+			_rotate_view(-motion.relative.x * mouse_sensitivity, -motion.relative.y * mouse_sensitivity)
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and not DisplayServer.is_touchscreen_available():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -187,6 +202,12 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed(&"toggle_camera"):
 		GameSettings.toggle_camera_mode()
+
+	_update_nearby_vehicle()
+	if Input.is_action_just_pressed(&"interact") and nearby_vehicle and not _attacking \
+			and Engine.get_physics_frames() != _left_vehicle_frame:
+		nearby_vehicle.enter(self)
+		return
 
 	var input_vec := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
 	var move_dir := Basis(Vector3.UP, _yaw) * Vector3(input_vec.x, 0.0, input_vec.y)
@@ -408,6 +429,56 @@ func _respawn() -> void:
 	respawned.emit()
 
 
+# ------------------------------------------------------------------ vehicles
+
+func _update_nearby_vehicle() -> void:
+	var best: DrivableCar = null
+	var best_dist := INTERACT_RANGE
+	for node in get_tree().get_nodes_in_group(&"vehicles"):
+		var car := node as DrivableCar
+		if car == null or not car.can_enter():
+			continue
+		var dist := car.global_position.distance_to(global_position)
+		if dist < best_dist:
+			best_dist = dist
+			best = car
+	if best != nearby_vehicle:
+		nearby_vehicle = best
+		nearby_vehicle_changed.emit(nearby_vehicle)
+
+
+## Called by DrivableCar.enter().
+func start_driving(car: DrivableCar) -> void:
+	current_vehicle = car
+	nearby_vehicle = null
+	nearby_vehicle_changed.emit(null)
+	_attacking = false
+	velocity = Vector3.ZERO
+	visible = false
+	collision_layer = 0
+	collision_mask = 0
+	set_physics_process(false)
+	set_process(false)
+	vehicle_changed.emit(car)
+
+
+## Called by DrivableCar.exit().
+func stop_driving(exit_position: Vector3, facing_yaw: float) -> void:
+	current_vehicle = null
+	_left_vehicle_frame = Engine.get_physics_frames()
+	global_position = exit_position
+	velocity = Vector3.ZERO
+	visible = true
+	collision_layer = PLAYER_LAYER
+	collision_mask = WORLD_LAYER | ENEMY_LAYER | VEHICLE_LAYER
+	_yaw = facing_yaw
+	_model_yaw = facing_yaw
+	set_physics_process(true)
+	set_process(true)
+	_camera.make_current()
+	vehicle_changed.emit(null)
+
+
 # --------------------------------------------------------------------- camera
 
 func _apply_camera_mode(mode: int, instant: bool = false) -> void:
@@ -454,7 +525,7 @@ func _build_camera() -> void:
 
 	_spring = SpringArm3D.new()
 	_spring.name = "SpringArm"
-	_spring.collision_mask = WORLD_LAYER
+	_spring.collision_mask = WORLD_LAYER | VEHICLE_LAYER
 	_spring.margin = 0.2
 	var probe := SphereShape3D.new()
 	probe.radius = 0.25
@@ -479,12 +550,44 @@ func _build_model() -> void:
 		var holder := Node3D.new()
 		holder.rotation.y = deg_to_rad(model_yaw_offset_deg)
 		_model.add_child(holder)
-		holder.add_child(model_scene.instantiate())
+		var instance := model_scene.instantiate() as Node3D
+		holder.add_child(instance)
+		_fit_model_height(instance)
 		var players := holder.find_children("*", "AnimationPlayer", true, false)
 		if not players.is_empty():
 			_anim_player = players[0] as AnimationPlayer
 		return
 	_build_placeholder_body()
+
+
+## Scales an imported model to `model_height` and puts its feet at y = 0,
+## whatever units the source file used.
+func _fit_model_height(instance: Node3D) -> void:
+	var bounds := _collect_bounds(instance, Transform3D.IDENTITY)
+	if bounds.size.y <= 0.001:
+		return
+	var s := model_height / bounds.size.y
+	instance.scale = Vector3.ONE * s
+	instance.position = Vector3(-bounds.get_center().x * s, -bounds.position.y * s, -bounds.get_center().z * s)
+
+
+## Bounds of every mesh under `node`, in the space of node's parent.
+func _collect_bounds(node: Node, parent_xform: Transform3D) -> AABB:
+	var xform := parent_xform
+	if node is Node3D:
+		xform = parent_xform * (node as Node3D).transform
+	var result := AABB()
+	var has_result := false
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh:
+		result = xform * (node as MeshInstance3D).mesh.get_aabb()
+		has_result = true
+	for child in node.get_children():
+		var child_bounds := _collect_bounds(child, xform)
+		if child_bounds.size == Vector3.ZERO:
+			continue
+		result = child_bounds if not has_result else result.merge(child_bounds)
+		has_result = true
+	return result
 
 
 ## Blocky stand-in matching the concept: chrome armour, dark undersuit,
@@ -562,7 +665,14 @@ func _play_anim(anim_name: StringName) -> bool:
 
 func _animate_punch() -> void:
 	var clip := &"punch_heavy" if _attack_heavy else StringName("punch_%d" % _combo_step)
-	if _play_anim(clip) or _fist_l == null:
+	if _play_anim(clip):
+		return
+	if _fist_l == null:
+		# Imported model without animations yet: a quick body lunge so punches still read.
+		var lunge := Vector3(0.0, 0.0, -0.35 if _attack_heavy else -0.2).rotated(Vector3.UP, _model_yaw)
+		var body_tween := create_tween()
+		body_tween.tween_property(_model, "position", lunge, _attack_active_at)
+		body_tween.tween_property(_model, "position", Vector3.ZERO, maxf(_attack_duration - _attack_active_at, 0.05))
 		return
 	var use_right := _attack_heavy or _combo_step % 2 == 1
 	var fist := _fist_r if use_right else _fist_l

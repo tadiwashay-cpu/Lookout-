@@ -43,7 +43,8 @@ problem, and the police will treat you accordingly.
 | Brawling goons in public | +8 per hit, **capped at 1★** | Vigilante noise. Cops notice but don't escalate. |
 | Hitting a civilian | +45 | |
 | Discharging a gun | +60 | |
-| Stealing a vehicle | +70 | |
+| Stealing a civilian car | +35 | First time you take that car |
+| Stealing a police car | +120 | |
 | Assaulting police | +90 | |
 
 - 1★ patrol cars investigate → 2★ pursuit → 3★ roadblocks → 4★ SWAT
@@ -66,6 +67,39 @@ A grey, rust-belt harbour city on a cold northern coast.
 
 Map target: roughly 2 × 2 km of drivable space at launch, split into
 streamed 128 m cells.
+
+## 6b. Vehicles
+Ten civilian cars and two police vehicles, all drivable. Each has a
+**hidden class (D → S)** that sets its engine, top speed, braking, grip
+and durability, and how rare it is to find. **Classes are never shown in
+the game.** Players learn them by driving.
+
+| Vehicle | Class (hidden) | Drive | Where it's found |
+|---|---|---|---|
+| Compact | D | FWD | Everywhere |
+| Minivan | D | FWD | Everywhere |
+| Hatchback | C | FWD | Common |
+| Sedan | C | RWD | Common |
+| Wagon | C | RWD | Common |
+| Pickup | C | AWD | Common (more in the docks and forest later) |
+| SUV | B | AWD | Uncommon |
+| Offroad | B | AWD | Uncommon (forest favourite) |
+| Coupe | A | RWD | Rare |
+| Sport | **S** | RWD | **One per district, hidden in a back alley** |
+| Police Interceptor (sedan) | A | RWD | Parked at precincts. Taking one is +120 heat |
+| Police Utility (SUV) | B | AWD | Parked at precincts. Taking one is +120 heat |
+
+- Civilian cars spawn in a muted paint palette (in-game repaint shader).
+  Police are navy (interceptor) and black (utility) with roof light
+  bars that flash while driven.
+- Enter/exit with **ENTER / EXIT** (E key, RB). Chase camera in third
+  person, driver's-seat view in first person (follows the CAM setting).
+- Driving controls: the joystick steers; **GAS / REV** pedals;
+  **BRAKE** = handbrake.
+- Running goons over hurts them, but it doesn't count for Clean Hands.
+- Next: police AI that chases in these same two vehicles (M2), car
+  damage, traffic.
+- Tuning lives in `scripts/vehicles/vehicle_catalog.gd`.
 
 ## 7. Factions
 - **Low Tide crew**: street gang terrorising the market. Red bandanas.
@@ -133,7 +167,8 @@ server-authoritative-friendly so co-op or PvP can be added.
 | Milestone | Content | Status |
 |---|---|---|
 | **M0** | Project setup, mobile renderer, touch controls, TPS/FPS camera, fist combat, goon AI, Heat system, Clean Hands greybox | ✅ in this branch |
-| **M1** | Hero 3D model + rig + animations imported; impact VFX/SFX | Needs the model (see `docs/character-pipeline.md`) |
+| **M1** | Hero 3D model imported ✅ (static); rig + animations, impact VFX/SFX | Needs rigging (see `docs/character-pipeline.md`) |
+| **M1.5** | Drivable cars (10 civilian + 2 police), hidden D–S classes, repaint | ✅ |
 | **M2** | Police AI and pursuit, civilians, reputation | |
 | **M3** | Guns, aiming (TPS/FPS), cover; goons with firearms | |
 | **M4** | World streaming, full market district art pass, baked lighting | |

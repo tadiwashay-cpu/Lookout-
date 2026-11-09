@@ -13,6 +13,7 @@ enum State { IDLE, CHASE, WINDUP, RECOVER, STAGGER, KNOCKDOWN, DEAD }
 const WORLD_LAYER := 1
 const PLAYER_LAYER := 2
 const ENEMY_LAYER := 4
+const VEHICLE_LAYER := 32
 const MAX_ACTIVE_ATTACKERS := 2
 
 static var _active_attackers: int = 0
@@ -29,6 +30,8 @@ static var _active_attackers: int = 0
 @export var wander_radius: float = 5.0
 
 var health: HealthComponent
+## True when the final blow came from a car (doesn't count for Clean Hands).
+var defeated_by_vehicle := false
 
 var _state: State = State.IDLE
 var _state_time := 0.0
@@ -47,7 +50,7 @@ var _body_material: StandardMaterial3D
 func _ready() -> void:
 	add_to_group(&"enemies")
 	collision_layer = ENEMY_LAYER
-	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER
+	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
 	floor_max_angle = deg_to_rad(60.0)
 	_rng.randomize()
 	_home = global_position
@@ -174,6 +177,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 		return
 	_release_token()
 	_body_material.emission = Color.BLACK
+	defeated_by_vehicle = attacker is DrivableCar
 	health.take_damage(damage, attacker)
 	velocity.x = knockback.x
 	velocity.z = knockback.z

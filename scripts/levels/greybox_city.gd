@@ -9,6 +9,7 @@ extends Node3D
 
 const PLAYER_SCENE := preload("res://scenes/characters/player.tscn")
 const GOON_SCENE := preload("res://scenes/characters/goon.tscn")
+const CAR_SCENE := preload("res://scenes/vehicles/car.tscn")
 ## Low enough that characters walk straight up it (no step-up in CharacterBody3D).
 const SIDEWALK_HEIGHT := 0.1
 
@@ -19,16 +20,23 @@ const SIDEWALK_HEIGHT := 0.1
 @export var city_seed: int = 1977
 @export var goon_squads: int = 4
 @export var goons_per_squad: int = 3
+## Parked civilian cars per block (each is a full physics vehicle — keep it modest on mobile).
+@export var cars_per_block: int = 1
 
 var _rng := RandomNumberGenerator.new()
 var _mat := {}
 var _pitch := 0.0
 var _player: PlayerController
+var _start := Vector3.ZERO
+## Spots kept clear of random parked cars (police precinct, player spawn).
+var _reserved: Array[Vector3] = []
 
 
 func _ready() -> void:
 	_rng.seed = city_seed
 	_pitch = block_size + street_width
+	_start = Vector3(_pitch * 0.5, 0.0, _pitch * 0.5)   # an intersection
+	_reserved = [_start, _police_spot(), _police_spot() + Vector3(7.0, 0.0, 0.0)]
 	_build_materials()
 	_build_environment()
 	_build_ground()
@@ -36,7 +44,7 @@ func _ready() -> void:
 	_build_street_markings()
 
 	_player = PLAYER_SCENE.instantiate() as PlayerController
-	_player.position = Vector3(_pitch * 0.5, 0.2, _pitch * 0.5)   # an intersection
+	_player.position = _start + Vector3.UP * 0.2
 	add_child(_player)
 
 	var challenge := CleanHandsChallenge.new()
@@ -57,6 +65,8 @@ func _ready() -> void:
 	touch_layer.add_child(touch)
 
 	_spawn_goons(challenge)
+	_spawn_police_precinct()
+	_spawn_hidden_supercar()
 	challenge.goons_required = mini(challenge.goons_required, goon_squads * goons_per_squad)
 	challenge.start()
 
@@ -240,24 +250,75 @@ func _build_streetlights(center: Vector3) -> void:
 		_add_visual(Vector3(0.12, 0.12, 0.12) + Vector3(absf(arm_dir.x), 0, absf(arm_dir.z)) * 1.2,
 			base + Vector3(0, 7.0, 0) - arm_dir * 0.6, _mat["metal"])
 		_add_visual(Vector3(0.5, 0.18, 0.5), base + Vector3(0, 6.9, 0) - arm_dir * 1.2, _mat["lamp"])
-	# Parked cars along the block edge.
-	for i in 2:
+	# Parked cars along the kerb. Common cars are common; good ones are rare finds.
+	for _i in cars_per_block:
 		var side := 1.0 if _rng.randf() > 0.5 else -1.0
 		var along := _rng.randf_range(-block_size * 0.35, block_size * 0.35)
 		var horizontal := _rng.randf() > 0.5
 		var offset := block_size * 0.5 + 1.6
 		var pos := center + (Vector3(along, 0, offset * side) if horizontal else Vector3(offset * side, 0, along))
-		_build_car(pos, horizontal)
+		if _is_reserved(pos):
+			continue
+		var id := VehicleCatalog.pick_civilian(_rng)
+		if id == "sport":
+			id = "coupe"   # the S-class car only exists at its hidden spot
+		_spawn_car(id, pos, _parked_yaw(horizontal), VehicleCatalog.random_paint(_rng))
 
 
-func _build_car(pos: Vector3, along_x: bool) -> void:
-	var cars: Array = _mat["cars"]
-	var paint: Material = cars[_rng.randi() % cars.size()]
-	var length := _rng.randf_range(4.2, 4.9)
-	var body := Vector3(length, 0.8, 1.8) if along_x else Vector3(1.8, 0.8, length)
-	var cabin := Vector3(length * 0.55, 0.62, 1.6) if along_x else Vector3(1.6, 0.62, length * 0.55)
-	_add_solid(body, pos + Vector3(0, 0.55, 0), paint)
-	_add_visual(cabin, pos + Vector3(0, 1.26, 0), _mat["storefront"])
+func _is_reserved(pos: Vector3) -> bool:
+	for spot in _reserved:
+		if Vector2(spot.x - pos.x, spot.z - pos.z).length() < 8.0:
+			return true
+	return false
+
+
+func _police_spot() -> Vector3:
+	return _start + Vector3(16.0, 0.0, -(street_width * 0.5) + 1.6)
+
+
+func _parked_yaw(along_x: bool) -> float:
+	# Car bodies face +Z (VehicleBody3D forward); pick either direction along the street.
+	var yaw := PI * 0.5 if along_x else 0.0
+	return yaw + (PI if _rng.randf() > 0.5 else 0.0)
+
+
+func _spawn_car(vehicle_id: String, pos: Vector3, yaw: float, paint: Color = Color(0, 0, 0, 0)) -> DrivableCar:
+	var car := CAR_SCENE.instantiate() as DrivableCar
+	car.vehicle_id = vehicle_id
+	car.paint = paint
+	car.position = pos + Vector3.UP * 0.35
+	car.rotation.y = yaw
+	add_child(car)
+	return car
+
+
+## Two police cars outside a precinct on the first block east of the start.
+## Taking one is possible — and a very serious crime.
+func _spawn_police_precinct() -> void:
+	var kerb := _police_spot()
+	_spawn_car("police_sedan", kerb, PI * 0.5)
+	_spawn_car("police_suv", kerb + Vector3(7.0, 0.0, 0.0), PI * 0.5)
+	# Precinct sign so the spot reads from the street.
+	var sign_board := MeshInstance3D.new()
+	var board := BoxMesh.new()
+	board.size = Vector3(6.0, 1.0, 0.2)
+	sign_board.mesh = board
+	var sign_material := StandardMaterial3D.new()
+	sign_material.albedo_color = Color(0.1, 0.15, 0.3)
+	sign_material.emission_enabled = true
+	sign_material.emission = Color(0.15, 0.25, 0.55)
+	sign_material.emission_energy_multiplier = 0.6
+	sign_board.material_override = sign_material
+	sign_board.position = kerb + Vector3(3.5, 4.5, -3.2)
+	add_child(sign_board)
+
+
+## The S-class car: one per district, tucked into a far service alley.
+func _spawn_hidden_supercar() -> void:
+	var far_block := _block_center(0 if _rng.randf() > 0.5 else blocks_x - 1, 0 if _rng.randf() > 0.5 else blocks_z - 1)
+	# z = -0.95 keeps it in the alley and clear of the dumpster slot (+z side).
+	_spawn_car("sport", far_block + Vector3(_rng.randf_range(-4.0, 4.0), SIDEWALK_HEIGHT, -0.95), PI * 0.5,
+		VehicleCatalog.random_paint(_rng))
 
 
 func _build_street_markings() -> void:

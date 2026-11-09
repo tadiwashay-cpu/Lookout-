@@ -4,7 +4,9 @@ extends Control
 ##  * left side  — floating joystick wherever your thumb lands; push to the
 ##                 edge to sprint
 ##  * right side — drag anywhere to look
-##  * buttons    — PUNCH / HEAVY / DODGE / JUMP, plus CAM (first/third person)
+##  * buttons    — on foot: PUNCH / HEAVY / DODGE / JUMP / CAM, plus ENTER
+##                 when a car is close; driving: GAS / REV / BRAKE / EXIT / CAM
+##                 and the joystick steers
 ## Everything is translated into the same input actions the keyboard and
 ## gamepad use, so gameplay code is device-agnostic.
 
@@ -20,6 +22,8 @@ var _joy_knob := Vector2.ZERO
 var _look_index := -1
 var _button_touches: Dictionary = {}   # touch index -> action
 var _buttons: Array[Dictionary] = []
+var _in_vehicle := false
+var _can_interact := false
 
 
 func _ready() -> void:
@@ -27,6 +31,20 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
 	resized.connect(_layout)
+	if player:
+		player.vehicle_changed.connect(_on_vehicle_changed)
+		player.nearby_vehicle_changed.connect(_on_nearby_vehicle_changed)
+	_layout()
+
+
+func _on_vehicle_changed(vehicle: DrivableCar) -> void:
+	_release_all()
+	_in_vehicle = vehicle != null
+	_layout()
+
+
+func _on_nearby_vehicle_changed(vehicle: DrivableCar) -> void:
+	_can_interact = vehicle != null
 	_layout()
 
 
@@ -50,13 +68,28 @@ func _release_all() -> void:
 
 func _layout() -> void:
 	var s := size
-	_buttons = [
-		{"action": &"punch_light", "label": "PUNCH", "pos": Vector2(s.x - 190, s.y - 190), "r": 100.0},
-		{"action": &"punch_heavy", "label": "HEAVY", "pos": Vector2(s.x - 400, s.y - 130), "r": 78.0},
-		{"action": &"dodge", "label": "DODGE", "pos": Vector2(s.x - 150, s.y - 410), "r": 74.0},
-		{"action": &"jump", "label": "JUMP", "pos": Vector2(s.x - 360, s.y - 330), "r": 66.0},
-		{"action": &"toggle_camera", "label": "CAM", "pos": Vector2(s.x - 110, 190), "r": 52.0},
-	]
+	# Release anything held by buttons that are about to disappear.
+	for index: int in _button_touches:
+		Input.action_release(_button_touches[index])
+	_button_touches.clear()
+	if _in_vehicle:
+		_buttons = [
+			{"action": &"move_forward", "label": "GAS", "pos": Vector2(s.x - 190, s.y - 190), "r": 100.0},
+			{"action": &"move_back", "label": "REV", "pos": Vector2(s.x - 400, s.y - 130), "r": 78.0},
+			{"action": &"jump", "label": "BRAKE", "pos": Vector2(s.x - 150, s.y - 410), "r": 74.0},
+			{"action": &"interact", "label": "EXIT", "pos": Vector2(s.x - 360, s.y - 330), "r": 66.0},
+			{"action": &"toggle_camera", "label": "CAM", "pos": Vector2(s.x - 110, 190), "r": 52.0},
+		]
+	else:
+		_buttons = [
+			{"action": &"punch_light", "label": "PUNCH", "pos": Vector2(s.x - 190, s.y - 190), "r": 100.0},
+			{"action": &"punch_heavy", "label": "HEAVY", "pos": Vector2(s.x - 400, s.y - 130), "r": 78.0},
+			{"action": &"dodge", "label": "DODGE", "pos": Vector2(s.x - 150, s.y - 410), "r": 74.0},
+			{"action": &"jump", "label": "JUMP", "pos": Vector2(s.x - 360, s.y - 330), "r": 66.0},
+			{"action": &"toggle_camera", "label": "CAM", "pos": Vector2(s.x - 110, 190), "r": 52.0},
+		]
+		if _can_interact:
+			_buttons.append({"action": &"interact", "label": "ENTER", "pos": Vector2(s.x - 560, s.y - 300), "r": 70.0})
 	queue_redraw()
 
 
@@ -115,6 +148,8 @@ func _on_drag(index: int, pos: Vector2, relative: Vector2) -> void:
 
 func _apply_move(stick: Vector2) -> void:
 	_set_axis(&"move_left", &"move_right", stick.x)
+	if _in_vehicle:
+		return   # GAS / REV buttons own the pedals; the stick only steers.
 	_set_axis(&"move_forward", &"move_back", stick.y)
 	if stick.length() >= SPRINT_THRESHOLD:
 		Input.action_press(&"sprint")

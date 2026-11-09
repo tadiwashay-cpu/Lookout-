@@ -18,6 +18,7 @@ const KEY_BINDINGS := {
 	&"punch_heavy": [KEY_K],
 	&"dodge": [KEY_L],
 	&"toggle_camera": [KEY_V],
+	&"interact": [KEY_E, KEY_F],
 	&"pause": [KEY_ESCAPE],
 }
 
@@ -28,6 +29,7 @@ const PAD_BUTTONS := {
 	&"punch_heavy": JOY_BUTTON_Y,
 	&"sprint": JOY_BUTTON_LEFT_STICK,
 	&"toggle_camera": JOY_BUTTON_BACK,
+	&"interact": JOY_BUTTON_RIGHT_SHOULDER,
 	&"pause": JOY_BUTTON_START,
 }
 

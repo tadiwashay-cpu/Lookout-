@@ -9,6 +9,7 @@ extends Node
 signal objectives_changed(text: String)
 signal completed(summary: String)
 signal failed(reason: String)
+signal hint(text: String)
 
 @export var goons_required: int = 12
 @export var finishers_required: int = 5
@@ -41,7 +42,10 @@ func start() -> void:
 	_emit_objectives()
 
 
-func _on_goon_defeated(_goon: Goon) -> void:
+func _on_goon_defeated(goon: Goon) -> void:
+	if goon.defeated_by_vehicle:
+		hint.emit("Clean Hands means fists — that one didn't count.")
+		return
 	_goons_down += 1
 	_check_complete()
 

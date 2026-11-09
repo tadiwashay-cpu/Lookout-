@@ -2,6 +2,15 @@
 
 Concept: `docs/concept/hero_concept_front.jpg` (front T-pose).
 
+## Status
+`assets/models/hero/hero.glb` is in and used by the player. It's an
+image-to-3D mesh: about 282k triangles, **no skeleton**, so it's a
+static T-pose for now. Punches play a body lunge. Next steps:
+1. **Rig it.** Mixamo only takes FBX/OBJ, so convert first (Blender on
+   a PC: import glb, then export fbx).
+2. **Decimate to about 40k triangles** for mobile. Godot also makes
+   distance LODs automatically on import.
+
 ## 1. Turn the concept into a 3D model
 Choose one:
 - **Image-to-3D tool** (fastest; Tripo, Meshy, Rodin, etc.). Feed it the

@@ -5,6 +5,7 @@ Open-world anti-hero action game for **Android**, built with **Godot 4 (Mobile r
 - Design: [`docs/game-design.md`](docs/game-design.md)
 - Art direction: [`docs/art-direction.md`](docs/art-direction.md)
 - Hero model pipeline: [`docs/character-pipeline.md`](docs/character-pipeline.md)
+- Third-party asset credits: [`CREDITS.md`](CREDITS.md)
 
 ## Run it
 1. Install Godot **4.4 or newer**. The Android editor app works.
@@ -23,6 +24,8 @@ Open-world anti-hero action game for **Android**, built with **Godot 4 (Mobile r
 | Jump | JUMP | Space | A |
 | Sprint | joystick to edge | Shift | L3 |
 | First/third person | CAM | V | Back/Select |
+| Enter / exit car | ENTER / EXIT (appears near a car) | E | RB |
+| Drive | Joystick steers, GAS / REV, BRAKE = handbrake | W/S, A/D, Space | Stick, RB to exit |
 
 ## Project layout
 | Path | Contents |
