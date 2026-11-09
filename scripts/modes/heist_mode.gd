@@ -68,6 +68,7 @@ func _spawn_solo_police() -> void:
 	pursuit.world = world
 	pursuit.forced_stars = 3
 	add_child(pursuit)
+	world.police = pursuit
 	pursuit.busted.connect(func() -> void: _resolve(false))
 
 

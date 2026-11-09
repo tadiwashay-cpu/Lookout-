@@ -11,6 +11,7 @@ const CHECKPOINT_RADIUS := 15.0
 const RACE_CAR := "sport"
 
 var _checkpoints: Array[Vector3] = []
+var _path: Array[Vector3] = []
 var _next := 0
 var _time := 0.0
 var _started := false
@@ -58,6 +59,8 @@ func _build_route() -> void:
 	path.append(suburb_end)
 	if Session.match_rng(5).randf() < 0.5:
 		path.reverse()
+	for p in path:
+		_path.append(Vector3(p.x, world.ground_height(p.x, p.z) + 0.4, p.z))
 	_checkpoints.append(path[0])
 	var travelled := 0.0
 	for i in range(1, path.size()):
@@ -73,9 +76,11 @@ func _build_route() -> void:
 
 func _spawn_bot_racers(start: Vector3, forward: Vector3, right: Vector3) -> void:
 	var rng := Session.match_rng(21)
+	# Follow the road itself (dense points), not straight lines between checkpoints.
 	var route: Array[Vector3] = []
-	for i in range(1, _checkpoints.size()):
-		route.append(_checkpoints[i])
+	for i in range(0, _path.size(), 3):
+		route.append(_path[i])
+	route.append(_path[_path.size() - 1])
 	for i in BOT_RACERS:
 		var slot := i + 1
 		var pos := start - forward * (8.0 + (slot / 2) * 9.0) + right * (3.5 if slot % 2 == 0 else -3.5)

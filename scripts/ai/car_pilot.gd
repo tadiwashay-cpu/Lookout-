@@ -13,6 +13,7 @@ var route_index := 0
 var aggression := 1.0              # 1 = normal, >1 = rams harder, brakes later
 var slot_offset := 0.0             # lateral offset when boxing in (-1..1)
 var skill := 1.0                   # race bots: corner speed / line quality
+var hold := false                  # pull over and stop (police deploying / standing down)
 
 var _stuck_time := 0.0
 var _reverse_time := 0.0
@@ -26,7 +27,13 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if car == null or car.driver != null:
+	if car == null or car.driver != null or car.freeze:
+		return
+	if hold:
+		car.ai_throttle = 0.0
+		car.ai_reverse = 0.6 if car.forward_speed() > 1.0 else 0.0
+		car.ai_steer = 0.0
+		car.ai_handbrake = false
 		return
 	var goal := _goal()
 	var to_goal := goal - car.global_position
@@ -47,7 +54,11 @@ func _physics_process(delta: float) -> void:
 
 	car.ai_steer = clampf(angle * 2.2, -1.0, 1.0)
 	var sharp := absf(angle) > 0.9
-	var corner_speed := lerpf(32.0, 9.0, clampf(absf(angle) / 1.4, 0.0, 1.0)) * skill * (1.0 + (aggression - 1.0) * 0.3)
+	# Straights: full car top speed. Corners: slow down with the turn angle.
+	var straight_cap: float = float(car.data["top_speed"]) * car.ai_top_speed_scale
+	var corner_speed := straight_cap
+	if absf(angle) > 0.35:
+		corner_speed = minf(straight_cap, lerpf(32.0, 9.0, clampf(absf(angle) / 1.4, 0.0, 1.0)) * skill * (1.0 + (aggression - 1.0) * 0.3))
 	if absf(angle) > 2.3 and distance < 30.0:
 		# Target is behind and close: reverse-turn instead of a huge circle.
 		car.ai_throttle = 0.0

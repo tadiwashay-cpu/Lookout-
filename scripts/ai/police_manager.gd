@@ -73,12 +73,12 @@ func _physics_process(delta: float) -> void:
 		if player.current_vehicle == null and dist < 28.0:
 			# Suspect on foot: pull up and send officers out.
 			pilot.target = null
-			unit.ai_throttle = 0.0
-			unit.ai_reverse = 0.6 if unit.forward_speed() > 1.0 else 0.0
+			pilot.hold = true
 			if not unit.has_meta(&"deployed"):
 				unit.set_meta(&"deployed", true)
 				_deploy_officers(unit, heat)
 		else:
+			pilot.hold = false
 			pilot.target = target
 		if dist > RUBBERBAND and not _on_screen(unit.global_position):
 			_reposition(unit, focus)
@@ -211,7 +211,7 @@ func _roadblock(target_car: DrivableCar) -> void:
 		return
 	var across := Vector3(-velocity.z, 0.0, velocity.x).normalized()
 	for side: float in [-1.0, 1.0]:
-		var car := world.spawn_car("police_sedan", best + across * side * 2.9 + Vector3.UP * 0.5, atan2(across.x, across.z))
+		var car := world.spawn_car("police_sedan", best + across * side * 4.0 + Vector3.UP * 0.5, atan2(across.x, across.z))
 		car.has_been_stolen = true
 		car.siren_on = true
 		car.add_to_group(&"police")
@@ -240,6 +240,7 @@ func _stand_down(focus: Vector3) -> void:
 		var pilot := unit.get_node_or_null("Pilot") as CarPilot
 		if pilot:
 			pilot.target = null
+			pilot.hold = true
 		unit.siren_on = false
 		if unit.global_position.distance_to(focus) > 120.0 and not _on_screen(unit.global_position):
 			unit.queue_free()

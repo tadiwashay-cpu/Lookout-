@@ -30,7 +30,7 @@ func _process(delta: float) -> void:
 			continue
 		alive.append(ped)
 	_peds = alive
-	var in_town := WorldCity.HALF_X > absf(focus.x) and WorldCity.HALF_Z > absf(focus.z) or WorldRegions.SUBURB_RECT.has_point(Vector2(focus.x, focus.z))
+	var in_town := (absf(focus.x) < WorldCity.HALF_X + 20.0 and absf(focus.z) < WorldCity.HALF_Z) or WorldRegions.SUBURB_RECT.has_point(Vector2(focus.x, focus.z))
 	if not in_town or _peds.size() >= MAX_PEDS:
 		return
 	for attempt in 6:

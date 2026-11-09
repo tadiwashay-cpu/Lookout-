@@ -19,6 +19,7 @@ var _panic := 0.0
 var _flee_from := Vector3.ZERO
 var _wait := 0.0
 var _rng := RandomNumberGenerator.new()
+var _action_lock := 0.0
 
 
 func _ready() -> void:
@@ -96,7 +97,9 @@ func _physics_process(delta: float) -> void:
 	if move.length() > 0.1:
 		rig.rotation.y = lerp_angle(rig.rotation.y, atan2(-move.x, -move.z), clampf(6.0 * delta, 0.0, 1.0))
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
-	rig.play_locomotion(0.0, flat.length())
+	_action_lock = maxf(_action_lock - delta, 0.0)
+	if _action_lock <= 0.0:
+		rig.play_locomotion(0.0, flat.length())
 
 
 func _avoid(move: Vector3) -> Vector3:
@@ -125,6 +128,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, _heavy: bool 
 		WantedSystem.report_crime(WantedSystem.CRIME_ASSAULT_CIVILIAN, global_position)
 	if not health.is_dead:
 		rig.replay(&"hit_unarmed", 1.6, 0.05)
+		_action_lock = 0.6
 
 
 func _on_died() -> void:

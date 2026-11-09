@@ -67,7 +67,7 @@ func _ready() -> void:
 	mass = data["mass"]
 	health = data["health"]
 	collision_layer = VEHICLE_LAYER
-	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
+	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER | 16   # 16 = pedestrians
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, 0.28, 0.0)   # low: resists rolling in sharp turns
 	contact_monitor = false   # only while driven (mobile perf)
@@ -76,7 +76,7 @@ func _ready() -> void:
 	can_sleep = true
 	set_process(false)
 	_build_from_model()
-	if is_police and paint.a == 0.0:
+	if is_police and paint.a == 0.0 and not data.has("colors"):
 		paint = VehicleCatalog.POLICE_PAINT.get(vehicle_id, Color(0.05, 0.05, 0.06))
 	if paint.a > 0.0:
 		_apply_paint(paint)
@@ -234,6 +234,15 @@ func enter(player: PlayerController) -> void:
 		return
 	driver = player
 	_entered_frame = Engine.get_physics_frames()
+	# Taking an AI car (e.g. a pursuit unit): the AI lets go for good.
+	ai_enabled = false
+	ai_throttle = 0.0
+	ai_reverse = 0.0
+	ai_steer = 0.0
+	siren_on = false
+	var pilot := get_node_or_null("Pilot")
+	if pilot:
+		pilot.queue_free()
 	sleeping = false
 	contact_monitor = true
 	set_process(true)
@@ -391,6 +400,8 @@ func _stabilize(delta: float) -> void:
 
 
 func _drive(delta: float, throttle: float, reverse: float, steer_input: float, handbrake: bool) -> void:
+	if freeze:
+		return
 	var speed := forward_speed()
 	var top_speed: float = data["top_speed"] * (0.55 if _slow_timer > 0.0 else 1.0) * ai_top_speed_scale
 	var accel: float = data["accel"] * (0.4 if _slow_timer > 0.0 else 1.0)
@@ -439,7 +450,7 @@ func _drive(delta: float, throttle: float, reverse: float, steer_input: float, h
 	_steer = move_toward(_steer, steer_input * max_steer, 2.4 * delta)
 	for wheel in _front_wheels:
 		wheel.steering = _steer
-	if ai_enabled and is_police:
+	if ai_enabled and is_police and siren_on:
 		_siren_time += delta
 		_flash_lights()
 

@@ -46,6 +46,11 @@ var _materials: Array[StandardMaterial3D] = []
 
 
 ## character_id: "x_bot", "y_bot" or "npc".
+func _ready() -> void:
+	# Run after the AnimationPlayer has posed the skeleton (no 1-frame lag).
+	process_priority = 100
+
+
 func setup(character_id: String, height: float = 1.8) -> void:
 	var path := GameSettings.NPC_SCENE
 	if character_id != "npc":
@@ -148,7 +153,7 @@ func _update_weapon() -> void:
 	if skeleton == null or _right_hand < 0 or _left_hand < 0:
 		weapon.global_transform = Transform3D(Basis.looking_at(forward, Vector3.UP), global_position + Vector3(0, 1.3, 0) + forward * 0.3)
 		return
-	var hand := skeleton.global_transform * skeleton.get_bone_global_pose(_right_hand)
+	var hand := (skeleton.global_transform * skeleton.get_bone_global_pose(_right_hand)).orthonormalized()
 	var key := "%s|%s" % [_model_key, weapon_id]
 	if not _fit_cache.has(key) and anim and anim.current_animation == &"idle" and anim.current_animation_position > 0.25:
 		_fit_cache[key] = hand.affine_inverse() * _two_hand_pose()
@@ -157,8 +162,9 @@ func _update_weapon() -> void:
 		target = hand * (_fit_cache[key] as Transform3D)
 	else:
 		target = _two_hand_pose()
+	target.basis = target.basis.orthonormalized()   # never inherit character scale
 	if _recoil > 0.0:
-		target.origin += target.basis.z.normalized() * _recoil
+		target.origin += target.basis.z * _recoil
 	weapon.global_transform = target
 
 

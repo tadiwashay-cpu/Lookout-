@@ -42,6 +42,7 @@ var _ammo := 0
 var _reload := 0.0
 var _rng := RandomNumberGenerator.new()
 var _last_attacker: Node
+var _action_lock := 0.0
 
 
 func _ready() -> void:
@@ -95,6 +96,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 	_fire_cd = maxf(_fire_cd - delta, 0.0)
+	_action_lock = maxf(_action_lock - delta, 0.0)
 	_think -= delta
 	if _think <= 0.0:
 		_think = 0.35 + _rng.randf() * 0.2
@@ -146,7 +148,9 @@ func _physics_process(delta: float) -> void:
 		rig.rotation.y = lerp_angle(rig.rotation.y, atan2(-face.x, -face.z), clampf(8.0 * delta, 0.0, 1.0))
 	var facing := Basis(Vector3.UP, rig.rotation.y)
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
-	if _reload > 0.0:
+	if _action_lock > 0.0:
+		pass   # let a one-shot (punch, flinch) finish
+	elif _reload > 0.0:
 		rig.play(&"reload", rig.clip_length(&"reload") / float(_weapon["reload"]))
 	elif flat.length() < 0.3 and _fire_cd > 0.0 and not melee_only:
 		rig.play(&"fire")
@@ -222,6 +226,7 @@ func _shoot() -> void:
 func _melee() -> void:
 	_fire_cd = 1.4
 	rig.replay(&"punch_1", 1.6)
+	_action_lock = rig.clip_length(&"punch_1") / 1.6
 	if _target and _target.has_method(&"take_hit"):
 		var push := (_target.global_position - global_position).normalized() * 3.0
 		_target.take_hit(12.0, push, self, false)
@@ -255,6 +260,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, _heavy: bool 
 		_reaction = 0.2
 	if not health.is_dead:
 		rig.replay(&"hit", 1.8, 0.05)
+		_action_lock = 0.3
 
 
 func _on_died() -> void:

@@ -599,15 +599,11 @@ func _start_punch(heavy: bool) -> void:
 	if heavy:
 		_combo_step = 0
 		_attack_damage = heavy_damage
-		_attack_active_at = 0.28
-		_attack_duration = 0.62
 	else:
 		if _combo_window <= 0.0:
 			_combo_step = 0
 		_combo_step = (_combo_step % light_damage.size()) + 1
 		_attack_damage = light_damage[_combo_step - 1]
-		_attack_active_at = 0.12
-		_attack_duration = 0.34 if _combo_step < light_damage.size() else 0.5
 	var flying := heavy and Vector3(velocity.x, 0, velocity.z).length() > run_speed + 0.5 and rig.has_clip(&"flying_kick")
 	if heavy:
 		_attack_duration = 0.85
