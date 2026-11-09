@@ -1,25 +1,44 @@
 # Lookout
 
-A 3D game built with **Godot 4**.
+Open-world anti-hero action game for **Android**, built with **Godot 4 (Mobile renderer)**.
 
-## Opening the project
-1. Install Godot 4 (4.4 or newer) from https://godotengine.org
-2. Project Manager → **Import** → select this folder's `project.godot`.
+- Design: [`docs/game-design.md`](docs/game-design.md)
+- Art direction: [`docs/art-direction.md`](docs/art-direction.md)
+- Hero model pipeline: [`docs/character-pipeline.md`](docs/character-pipeline.md)
 
-## Folder layout
-| Folder | What goes there |
+## Run it
+1. Install Godot **4.4 or newer**. The Android editor app works.
+2. Project Manager → **Import** → choose `project.godot`.
+3. Press **Play**. The main scene is the *Clean Hands* market district
+   greybox: `scenes/levels/test_city.tscn`.
+
+## Controls
+| | Touch (Android) | Keyboard / mouse | Gamepad |
+|---|---|---|---|
+| Move | Left-thumb joystick (push to edge = sprint) | WASD | Left stick |
+| Look | Drag on the right half | Mouse (click to capture) | Right stick |
+| Punch (combo) | PUNCH | J | X |
+| Heavy punch | HEAVY | K | Y |
+| Dodge | DODGE | L | B |
+| Jump | JUMP | Space | A |
+| Sprint | joystick to edge | Shift | L3 |
+| First/third person | CAM | V | Back/Select |
+
+## Project layout
+| Path | Contents |
 |---|---|
-| `assets/models/` | 3D models — prefer **`.glb`** (glTF binary); `.blend` also works if Blender is installed |
-| `assets/textures/` | Image textures (`.png`, `.jpg`, `.webp`) |
-| `assets/materials/` | Godot material resources (`.tres`) |
-| `assets/audio/music/`, `assets/audio/sfx/` | `.ogg` for music, `.wav` for short sound effects |
-| `assets/fonts/` | `.ttf` / `.otf` fonts |
-| `scenes/levels/`, `scenes/characters/`, `scenes/ui/` | Godot scenes (`.tscn`) |
-| `scripts/` | GDScript (`.gd`), split by player / enemies / systems / ui |
-| `addons/` | Godot plugins |
-| `docs/` | Game design notes, concept art, references |
+| `scripts/autoloads/` | `InputSetup` (input map), `GameSettings` (saved prefs), `WantedSystem` (police heat) |
+| `scripts/player/` | Hero controller: camera, movement, combat |
+| `scripts/enemies/` | Goon AI |
+| `scripts/missions/` | Mission / challenge logic (Clean Hands) |
+| `scripts/levels/` | Level builders (greybox city) |
+| `scripts/ui/` | HUD, wanted stars, touch controls |
+| `scripts/components/` | Reusable components (health) |
+| `scenes/` | `.tscn` scenes |
+| `assets/` | Models (`.glb`), textures, audio, fonts |
+| `docs/` | Design docs and concept art |
 
 ## Adding assets
-- Keep each file under **100 MB** (GitHub's hard limit); web uploads are capped at 25 MB per file.
-- Export models as `.glb` with textures embedded or placed in `assets/textures/`.
-- Use lowercase names with underscores, e.g. `player_idle.glb`, `rock_large_01.png`.
+- Models as **`.glb`**, ≤ 40k triangles for the hero.
+- Keep files under 100 MB (GitHub's limit); browser uploads are capped at 25 MB.
+- Lowercase names with underscores, e.g. `goon_thug_a.glb`.
