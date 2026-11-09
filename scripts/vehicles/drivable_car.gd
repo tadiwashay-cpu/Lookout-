@@ -22,11 +22,15 @@ const CAR_SCENE_DISTANCE := 140.0   # meshes fade out beyond this (mobile draw c
 @export var vehicle_id: String = "sedan"
 ## Leave transparent to keep the factory paint.
 @export var paint: Color = Color(0, 0, 0, 0)
+## Street Race: the driver can't get out.
+@export var locked := false
 
 var data: Dictionary
 var driver: PlayerController
 var has_been_stolen := false
 var is_police := false
+var health := 800.0
+var _slow_timer := 0.0
 
 var _wheels: Array[VehicleWheel3D] = []
 var _front_wheels: Array[VehicleWheel3D] = []
@@ -49,6 +53,7 @@ func _ready() -> void:
 	data = VehicleCatalog.get_data(vehicle_id)
 	is_police = data["police"]
 	mass = data["mass"]
+	health = data["health"]
 	collision_layer = VEHICLE_LAYER
 	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
@@ -202,7 +207,7 @@ func enter(player: PlayerController) -> void:
 	sleeping = false
 	contact_monitor = true
 	set_process(true)
-	if not has_been_stolen:
+	if not has_been_stolen and Session.mode == Session.MODE_STORY:
 		has_been_stolen = true
 		var severity := WantedSystem.CRIME_POLICE_VEHICLE_THEFT if is_police else WantedSystem.CRIME_VEHICLE_THEFT
 		WantedSystem.report_crime(severity, global_position)
@@ -273,6 +278,29 @@ func forward_speed() -> float:
 	return linear_velocity.dot(global_basis.z)
 
 
+## Grenade hits in Street Race: brief loss of power and top speed.
+func apply_slow(seconds: float) -> void:
+	_slow_timer = maxf(_slow_timer, seconds)
+
+
+func is_slowed() -> bool:
+	return _slow_timer > 0.0
+
+
+func take_vehicle_damage(amount: float) -> void:
+	health = maxf(health - amount, 0.0)
+	if health <= 0.0 and driver and not locked:
+		exit()
+
+
+func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool = false) -> void:
+	if has_meta(&"remote_peer"):
+		Net.send_damage(int(get_meta(&"remote_peer")), damage)
+		return
+	take_vehicle_damage(damage)
+	apply_central_impulse(knockback * mass * 0.05)
+
+
 func _physics_process(delta: float) -> void:
 	if driver == null:
 		return
@@ -282,42 +310,59 @@ func _physics_process(delta: float) -> void:
 		GameSettings.toggle_camera_mode()
 
 	# Same press that got us in must not also get us out.
-	if Input.is_action_just_pressed(&"interact") and Engine.get_physics_frames() != _entered_frame:
+	if Input.is_action_just_pressed(&"interact") and Engine.get_physics_frames() != _entered_frame and not locked:
 		exit()
 		return
+	if Input.is_action_just_pressed(&"grenade"):
+		driver.use_vehicle_grenade()
+	driver.send_state_from_vehicle(delta)
+	_slow_timer = maxf(_slow_timer - delta, 0.0)
 
 	var throttle := Input.get_action_strength(&"move_forward")
 	var reverse := Input.get_action_strength(&"move_back")
 	var steer_input := Input.get_axis(&"move_right", &"move_left")
 	var speed := forward_speed()
-	var top_speed: float = data["top_speed"]
-	# Catalog values are per wheel for a 2WD 1000 kg car; AWD splits the same total.
-	var per_wheel_engine: float = float(data["engine"]) * float(data["mass"]) / 1000.0 * 2.0 / maxf(_traction_count, 1)
-	var brake_force: float = data["brake"]
+	var top_speed: float = data["top_speed"] * (0.55 if _slow_timer > 0.0 else 1.0)
+	var accel: float = data["accel"] * (0.4 if _slow_timer > 0.0 else 1.0)
+	var decel: float = data["decel"]
+	var forward := global_basis.z
+	var grounded := 0
+	for wheel in _wheels:
+		if wheel.is_in_contact():
+			grounded += 1
 
-	var engine := 0.0
-	var braking := 0.0
+	# Drive by applying the acceleration directly as a force on the body:
+	# predictable on every device, independent of Godot's wheel force units.
+	var drive := 0.0     # m/s^2 along the car's forward axis
+	var holding := false
 	if throttle > 0.05:
-		if speed < -1.0:
-			braking = brake_force * throttle
+		if speed < -0.5:
+			drive = decel * throttle
 		elif speed < top_speed:
-			engine = per_wheel_engine * throttle
+			drive = accel * throttle * clampf(1.15 - speed / top_speed, 0.25, 1.0)
 	elif reverse > 0.05:
-		if speed > 1.0:
-			braking = brake_force * reverse
+		if speed > 0.5:
+			drive = -decel * reverse
 		elif speed > -top_speed * 0.3:
-			engine = -per_wheel_engine * 0.6 * reverse
+			drive = -accel * 0.55 * reverse
 	else:
-		braking = brake_force * 0.06   # engine braking / coasting
+		drive = -signf(speed) * minf(1.2, absf(speed) * 2.0)   # coasting drag
+		holding = absf(speed) < 0.4
+	if grounded >= 2:
+		apply_central_force(forward * drive * mass)
+	# Air drag so cars settle at their top speed instead of creeping past it.
+	apply_central_force(-linear_velocity * mass * 0.015)
 
 	var handbrake := Input.is_action_pressed(&"jump")
+	var hold_brake: float = data["brake"]
 	for wheel in _wheels:
-		wheel.engine_force = engine if wheel.use_as_traction else 0.0
-		wheel.brake = braking
+		wheel.engine_force = 0.0
+		wheel.brake = hold_brake if holding else 0.0
+		wheel.wheel_friction_slip = data["grip"]
 	if handbrake:
 		for wheel in _rear_wheels:
-			wheel.brake = brake_force * 1.5
-			wheel.engine_force = 0.0
+			wheel.brake = hold_brake * 1.5
+			wheel.wheel_friction_slip = float(data["grip"]) * 0.45   # let the rear step out
 
 	# Less steering lock at speed keeps the car controllable on a touchscreen.
 	var speed_factor := clampf(absf(speed) / top_speed, 0.0, 1.0)

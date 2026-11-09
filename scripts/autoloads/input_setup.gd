@@ -19,6 +19,12 @@ const KEY_BINDINGS := {
 	&"dodge": [KEY_L],
 	&"toggle_camera": [KEY_V],
 	&"interact": [KEY_E, KEY_F],
+	&"fire": [KEY_ENTER],
+	&"aim": [KEY_Q],
+	&"reload": [KEY_R],
+	&"grenade": [KEY_G],
+	&"surge": [KEY_X],
+	&"swap_weapon": [KEY_TAB, KEY_1],
 	&"pause": [KEY_ESCAPE],
 }
 
@@ -30,6 +36,10 @@ const PAD_BUTTONS := {
 	&"sprint": JOY_BUTTON_LEFT_STICK,
 	&"toggle_camera": JOY_BUTTON_BACK,
 	&"interact": JOY_BUTTON_RIGHT_SHOULDER,
+	&"reload": JOY_BUTTON_X,
+	&"grenade": JOY_BUTTON_DPAD_UP,
+	&"surge": JOY_BUTTON_DPAD_DOWN,
+	&"swap_weapon": JOY_BUTTON_DPAD_LEFT,
 	&"pause": JOY_BUTTON_START,
 }
 
@@ -42,6 +52,13 @@ const PAD_AXES := {
 	&"look_right": [JOY_AXIS_RIGHT_X, 1.0],
 	&"look_up": [JOY_AXIS_RIGHT_Y, -1.0],
 	&"look_down": [JOY_AXIS_RIGHT_Y, 1.0],
+	&"fire": [JOY_AXIS_TRIGGER_RIGHT, 1.0],
+	&"aim": [JOY_AXIS_TRIGGER_LEFT, 1.0],
+}
+
+const MOUSE_BUTTONS := {
+	&"fire": MOUSE_BUTTON_LEFT,
+	&"aim": MOUSE_BUTTON_RIGHT,
 }
 
 
@@ -58,6 +75,12 @@ func _enter_tree() -> void:
 		var button_event := InputEventJoypadButton.new()
 		button_event.button_index = PAD_BUTTONS[action]
 		InputMap.action_add_event(action, button_event)
+
+	for action: StringName in MOUSE_BUTTONS:
+		_ensure_action(action)
+		var mouse_event := InputEventMouseButton.new()
+		mouse_event.button_index = MOUSE_BUTTONS[action]
+		InputMap.action_add_event(action, mouse_event)
 
 	for action: StringName in PAD_AXES:
 		_ensure_action(action)

@@ -1,19 +1,21 @@
 class_name PlayerController
 extends CharacterBody3D
-## The hero. Third-person or first-person camera (player's choice, saved),
-## camera-relative movement, dodge, and a fist combo system with auto-aim,
-## hit-stop and screen shake so melee feels weighty on a touchscreen.
-##
-## Drop a rigged .glb into `model_scene` to replace the placeholder body.
-## If the model has an AnimationPlayer, clips named idle / walk / run /
-## punch_1 / punch_2 / punch_3 / punch_heavy / dodge / hit / knocked_out
-## are played automatically.
+## The player: X Bot or Y Bot (chosen in the menu).
+##  * third- or first-person camera (saved setting), aim zoom
+##  * armed (rifle): character faces the camera and strafes; tap FIRE,
+##    RELOAD, GRENADE, SURGE (power-surge blast)
+##  * unarmed (fists): punch combos — used when weapons are locked
+##    (e.g. the Clean Hands mission)
+##  * cars: walk up and press ENTER
+## Health, damage and deaths are reported over the network in multiplayer.
 
 signal attack_landed(target: Node3D, damage: float, combo_step: int)
 signal knocked_out
 signal respawned
 signal vehicle_changed(vehicle: DrivableCar)
 signal nearby_vehicle_changed(vehicle: DrivableCar)
+signal ammo_changed(in_mag: int, reserve: int)
+signal loadout_changed
 
 const WORLD_LAYER := 1
 const PLAYER_LAYER := 2
@@ -23,69 +25,94 @@ const LOOK_SCALE := 0.0045
 const INTERACT_RANGE := 3.4
 
 @export_group("Movement")
-@export var run_speed: float = 6.0
-@export var sprint_speed: float = 9.0
-@export var acceleration: float = 22.0
+@export var run_speed: float = 4.3
+@export var sprint_speed: float = 6.2
+@export var aim_speed: float = 2.3
+@export var acceleration: float = 20.0
 @export var air_control: float = 0.35
-@export var jump_velocity: float = 5.4
+@export var jump_velocity: float = 5.2
 @export var turn_speed: float = 12.0
 
-@export_group("Dodge")
-@export var dodge_speed: float = 12.0
-@export var dodge_time: float = 0.26
-@export var dodge_cooldown: float = 0.55
-
 @export_group("Camera")
-@export var third_person_distance: float = 3.6
-@export var shoulder_offset: float = 0.55
-@export var eye_height: float = 1.62
+@export var third_person_distance: float = 3.4
+@export var aim_distance: float = 1.7
+@export var shoulder_offset: float = 0.6
+@export var eye_height: float = 1.6
 @export var min_pitch_deg: float = -70.0
 @export var max_pitch_deg: float = 55.0
 @export var mouse_sensitivity: float = 0.0025
 @export var stick_look_speed: float = 3.2
 @export var camera_fov: float = 72.0
+@export var aim_fov: float = 52.0
 
-@export_group("Combat")
-@export var max_health: float = 150.0
+@export_group("Rifle")
+@export var rifle_damage: float = 20.0
+@export var fire_rate: float = 9.0
+@export var mag_size: int = 30
+@export var start_reserve: int = 180
+@export var reload_time: float = 2.2
+@export var rifle_range: float = 160.0
+@export var spread_deg: float = 1.6
+@export var aim_spread_deg: float = 0.4
+
+@export_group("Abilities")
+@export var grenade_count: int = 3
+@export var grenade_cooldown: float = 4.0
+@export var surge_cooldown: float = 12.0
+@export var surge_radius: float = 6.0
+@export var surge_damage: float = 35.0
+
+@export_group("Fists")
 @export var light_damage: Array[float] = [10.0, 11.0, 20.0]
 @export var heavy_damage: float = 28.0
 @export var punch_reach: float = 1.0
 @export var punch_radius: float = 0.8
-@export var input_buffer_time: float = 0.25
-@export var combo_reset_time: float = 0.45
-@export var auto_aim_range: float = 3.2
+
+@export_group("Health")
+@export var max_health: float = 150.0
 @export var respawn_delay: float = 3.0
 
-@export_group("Visuals")
-## Rigged character model (.glb). Leave empty to use the placeholder.
-@export var model_scene: PackedScene
-## Imported glTF characters usually face +Z; Godot's forward is -Z.
-@export var model_yaw_offset_deg: float = 180.0
-## The model is scaled so its height matches this (metres), feet on the ground.
-@export var model_height: float = 1.85
-
 var health: HealthComponent
+var rig: CharacterRig
 var current_vehicle: DrivableCar
 var nearby_vehicle: DrivableCar
-var _left_vehicle_frame := -1
+
+## Missions/modes switch these.
+var weapons_allowed := true:
+	set(value):
+		weapons_allowed = value
+		_refresh_armed()
+var respawn_enabled := true
+var spawn_point := Vector3.ZERO
+## Multiplayer: the peer that last hurt us (for kill credit).
+var last_attacker_peer := 0
+
+var ammo := 0
+var reserve := 0
+var grenades := 0
+var aiming := false
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-var _spawn_point: Vector3
-var _yaw: float = 0.0
-var _pitch: float = -0.2
-var _model_yaw: float = 0.0
-var _camera_mode: int = 0
-var _shake: float = 0.0
-
+var _yaw := 0.0
+var _pitch := -0.2
+var _model_yaw := 0.0
+var _camera_mode := 0
+var _shake := 0.0
 var _pivot: Node3D
 var _spring: SpringArm3D
 var _camera: Camera3D
 var _model: Node3D
-var _anim_player: AnimationPlayer
-var _fist_l: Node3D
-var _fist_r: Node3D
-var _fist_rest_l := Vector3.ZERO
-var _fist_rest_r := Vector3.ZERO
+
+var _wants_armed := true
+var _fire_cooldown := 0.0
+var _reload_timer := 0.0
+var _grenade_timer := 0.0
+var _surge_timer := 0.0
+var _throw_timer := 0.0
+var _action_lock := 0.0
+var _heat_timer := 0.0
+var _left_vehicle_frame := -1
+var _net_timer := 0.0
 
 var _attacking := false
 var _attack_elapsed := 0.0
@@ -96,13 +123,6 @@ var _attack_heavy := false
 var _attack_hit_done := false
 var _combo_step := 0
 var _combo_window := 0.0
-var _buffered_attack: StringName = &""
-var _buffer_timer := 0.0
-
-var _dodge_timer := 0.0
-var _hurt_timer := 0.0
-var _dodge_cooldown_timer := 0.0
-var _dodge_dir := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -111,7 +131,7 @@ func _ready() -> void:
 	collision_mask = WORLD_LAYER | ENEMY_LAYER | VEHICLE_LAYER
 	floor_snap_length = 0.3
 	floor_max_angle = deg_to_rad(60.0)
-	_spawn_point = global_position
+	spawn_point = global_position
 	_yaw = rotation.y
 	rotation = Vector3.ZERO
 	_model_yaw = _yaw
@@ -122,38 +142,91 @@ func _ready() -> void:
 	add_child(health)
 	health.died.connect(_on_died)
 
-	_build_collision()
-	_build_model()
-	_build_camera()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	var shape := CollisionShape3D.new()
+	shape.shape = capsule
+	shape.position.y = 0.9
+	add_child(shape)
 
+	_model = Node3D.new()
+	_model.name = "Model"
+	add_child(_model)
+	rig = CharacterRig.new()
+	rig.name = "Rig"
+	_model.add_child(rig)
+	rig.setup(GameSettings.character)
+
+	_build_camera()
+	ammo = mag_size
+	reserve = start_reserve
+	grenades = grenade_count
 	_camera_mode = GameSettings.camera_mode
 	GameSettings.camera_mode_changed.connect(_apply_camera_mode)
 	_apply_camera_mode(_camera_mode, true)
+	_refresh_armed()
 
+	Net.damage_received.connect(_on_net_damage)
+	Net.slow_received.connect(_on_net_slow)
 
-# ---------------------------------------------------------------- input / look
 
 func _exit_tree() -> void:
-	# A hit-stop interrupted by a scene change must not leave the game in slow motion.
 	Engine.time_scale = 1.0
 
+
+# ------------------------------------------------------------------ state
 
 func is_alive() -> bool:
 	return not health.is_dead
 
 
-## Goons ignore a player who is inside a car.
 func is_targetable() -> bool:
 	return is_alive() and current_vehicle == null
 
 
-## Called by TouchControls (drag on the right half of the screen).
+func is_armed() -> bool:
+	return weapons_allowed and _wants_armed
+
+
+func grenade_ready() -> float:
+	return 1.0 - clampf(_grenade_timer / grenade_cooldown, 0.0, 1.0)
+
+
+func surge_ready() -> float:
+	return 1.0 - clampf(_surge_timer / surge_cooldown, 0.0, 1.0)
+
+
+func is_reloading() -> bool:
+	return _reload_timer > 0.0
+
+
+func camera() -> Camera3D:
+	return _camera
+
+
+func view_yaw() -> float:
+	return _yaw
+
+
+func _refresh_armed() -> void:
+	if rig:
+		rig.armed = is_armed()
+	if not is_armed():
+		aiming = false
+	loadout_changed.emit()
+	ammo_changed.emit(ammo, reserve)
+
+
+# ------------------------------------------------------------------ look
+
 func add_look_input(delta_px: Vector2) -> void:
 	if current_vehicle:
 		current_vehicle.add_look_input(delta_px)
 		return
-	var s := LOOK_SCALE * GameSettings.look_sensitivity
-	_rotate_view(-delta_px.x * s, -delta_px.y * s)
+	var s := LOOK_SCALE * GameSettings.look_sensitivity * (0.6 if aiming else 1.0)
+	var invert := -1.0 if GameSettings.invert_look_y else 1.0
+	_rotate_view(-delta_px.x * s, -delta_px.y * s * invert)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -166,8 +239,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
 			and not DisplayServer.is_touchscreen_available():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	elif event.is_action_pressed(&"pause"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 func _rotate_view(yaw_delta: float, pitch_delta: float) -> void:
@@ -179,9 +250,15 @@ func _process(delta: float) -> void:
 	var stick := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
 	if stick != Vector2.ZERO:
 		_rotate_view(-stick.x * stick_look_speed * delta, -stick.y * stick_look_speed * delta)
-
 	_pivot.position = Vector3(0.0, eye_height, 0.0)
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
+
+	var first_person := _camera_mode == GameSettings.FIRST_PERSON
+	var target_fov := aim_fov if aiming else camera_fov
+	_camera.fov = lerpf(_camera.fov, target_fov, clampf(delta * 10.0, 0.0, 1.0))
+	if not first_person:
+		var target_len := aim_distance if aiming else third_person_distance
+		_spring.spring_length = lerpf(_spring.spring_length, target_len, clampf(delta * 10.0, 0.0, 1.0))
 
 	if _shake > 0.0:
 		_shake = maxf(_shake - delta * 1.6, 0.0)
@@ -193,9 +270,10 @@ func _process(delta: float) -> void:
 		_camera.v_offset = 0.0
 
 
-# ------------------------------------------------------------------- movement
+# --------------------------------------------------------------- movement
 
 func _physics_process(delta: float) -> void:
+	_send_network_state(delta)
 	if health.is_dead:
 		velocity.x = move_toward(velocity.x, 0.0, 10.0 * delta)
 		velocity.z = move_toward(velocity.z, 0.0, 10.0 * delta)
@@ -205,9 +283,12 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_tick_timers(delta)
-
 	if Input.is_action_just_pressed(&"toggle_camera"):
 		GameSettings.toggle_camera_mode()
+	if Input.is_action_just_pressed(&"swap_weapon") and weapons_allowed:
+		_wants_armed = not _wants_armed
+		_reload_timer = 0.0
+		_refresh_armed()
 
 	_update_nearby_vehicle()
 	if Input.is_action_just_pressed(&"interact") and nearby_vehicle and not _attacking \
@@ -215,101 +296,255 @@ func _physics_process(delta: float) -> void:
 		nearby_vehicle.enter(self)
 		return
 
+	if is_armed():
+		if Input.is_action_just_pressed(&"aim"):
+			aiming = not aiming
+		if Input.is_action_pressed(&"fire"):
+			_try_fire()
+		if Input.is_action_just_pressed(&"reload"):
+			_start_reload()
+		if Input.is_action_just_pressed(&"grenade"):
+			_try_throw_grenade()
+	else:
+		_read_punch_input()
+	if Input.is_action_just_pressed(&"surge"):
+		_try_surge()
+
 	var input_vec := Input.get_vector(&"move_left", &"move_right", &"move_forward", &"move_back")
 	var move_dir := Basis(Vector3.UP, _yaw) * Vector3(input_vec.x, 0.0, input_vec.y)
-
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
 
-	if _dodge_timer > 0.0:
-		velocity.x = _dodge_dir.x * dodge_speed
-		velocity.z = _dodge_dir.z * dodge_speed
-	else:
-		var target_speed := run_speed * input_vec.length()
-		if Input.is_action_pressed(&"sprint") and input_vec.length() > 0.1:
-			target_speed = sprint_speed
-		if _attacking:
-			target_speed *= 0.2
-		var target_velocity := Vector3.ZERO
-		if move_dir.length() > 0.01:
-			target_velocity = move_dir.normalized() * target_speed
-		var accel := acceleration if is_on_floor() else acceleration * air_control
-		var horizontal := Vector3(velocity.x, 0.0, velocity.z).move_toward(target_velocity, accel * delta)
-		velocity.x = horizontal.x
-		velocity.z = horizontal.z
+	var target_speed := run_speed * input_vec.length()
+	if Input.is_action_pressed(&"sprint") and input_vec.length() > 0.1 and not aiming:
+		target_speed = sprint_speed
+	if aiming:
+		target_speed = minf(target_speed, aim_speed)
+	if _attacking or _throw_timer > 0.0:
+		target_speed *= 0.3
+	var target_velocity := move_dir.normalized() * target_speed if move_dir.length() > 0.01 else Vector3.ZERO
+	var accel := acceleration if is_on_floor() else acceleration * air_control
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z).move_toward(target_velocity, accel * delta)
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
 
 	if Input.is_action_just_pressed(&"jump") and is_on_floor() and not _attacking:
 		velocity.y = jump_velocity
+		rig.play(&"jump", 1.0, 0.08)
+		_action_lock = 0.45
 
-	if Input.is_action_just_pressed(&"dodge"):
-		_try_dodge(move_dir)
-
-	_read_attack_input()
-	_update_attack(delta)
+	_update_punch(delta)
 	move_and_slide()
-	_update_model(move_dir, delta)
-
+	_update_facing_and_anim(move_dir, delta)
 	if global_position.y < -40.0:
 		_respawn()
 
 
 func _tick_timers(delta: float) -> void:
-	_dodge_timer = maxf(_dodge_timer - delta, 0.0)
-	_dodge_cooldown_timer = maxf(_dodge_cooldown_timer - delta, 0.0)
-	_buffer_timer = maxf(_buffer_timer - delta, 0.0)
-	_hurt_timer = maxf(_hurt_timer - delta, 0.0)
-	if _buffer_timer <= 0.0:
-		_buffered_attack = &""
+	_fire_cooldown = maxf(_fire_cooldown - delta, 0.0)
+	_grenade_timer = maxf(_grenade_timer - delta, 0.0)
+	_surge_timer = maxf(_surge_timer - delta, 0.0)
+	_action_lock = maxf(_action_lock - delta, 0.0)
+	_heat_timer = maxf(_heat_timer - delta, 0.0)
+	if _throw_timer > 0.0:
+		_throw_timer -= delta
+	if _reload_timer > 0.0:
+		_reload_timer -= delta
+		if _reload_timer <= 0.0:
+			var take := mini(mag_size - ammo, reserve)
+			ammo += take
+			reserve -= take
+			ammo_changed.emit(ammo, reserve)
 
 
-func _try_dodge(move_dir: Vector3) -> void:
-	if _dodge_cooldown_timer > 0.0 or not is_on_floor():
-		return
-	_attacking = false
-	_dodge_dir = move_dir.normalized() if move_dir.length() > 0.1 else Basis(Vector3.UP, _model_yaw) * Vector3.BACK
-	_dodge_timer = dodge_time
-	_dodge_cooldown_timer = dodge_cooldown
-	_play_anim(&"dodge")
-
-
-func _update_model(move_dir: Vector3, delta: float) -> void:
-	if _camera_mode == GameSettings.FIRST_PERSON:
-		_model_yaw = _yaw
-	elif move_dir.length() > 0.1 and not _attacking and _dodge_timer <= 0.0:
-		var target_yaw := atan2(-move_dir.x, -move_dir.z)
-		_model_yaw = lerp_angle(_model_yaw, target_yaw, clampf(turn_speed * delta, 0.0, 1.0))
+func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
+	# Armed or first person: face where the camera looks (strafe).
+	# Fists: face the way you move.
+	if is_armed() or _camera_mode == GameSettings.FIRST_PERSON:
+		_model_yaw = lerp_angle(_model_yaw, _yaw, clampf(turn_speed * 1.5 * delta, 0.0, 1.0))
+	elif move_dir.length() > 0.1 and not _attacking:
+		_model_yaw = lerp_angle(_model_yaw, atan2(-move_dir.x, -move_dir.z), clampf(turn_speed * delta, 0.0, 1.0))
 	_model.rotation.y = _model_yaw
 
-	if _attacking or _dodge_timer > 0.0 or _hurt_timer > 0.0:
+	if _action_lock > 0.0 or _attacking or _throw_timer > 0.0:
 		return
-	var speed := Vector3(velocity.x, 0.0, velocity.z).length()
-	# Scale playback so feet keep pace with the ground (clips are authored
-	# for ~2.4 m/s walking and ~6 m/s running).
-	if speed > 4.0:
-		_play_anim(&"run", clampf(speed / 6.0, 0.8, 1.6))
-	elif speed > 0.3:
-		_play_anim(&"walk", clampf(speed / 2.4, 0.6, 1.7))
-	else:
-		_play_anim(&"idle")
+	if _reload_timer > 0.0:
+		rig.play(&"reload", 3.3 / reload_time, 0.1)
+		return
+	var facing := Basis(Vector3.UP, _model_yaw)
+	var flat := Vector3(velocity.x, 0.0, velocity.z)
+	var local_forward := flat.dot(facing * Vector3.FORWARD)
+	var local_right := flat.dot(facing * Vector3.RIGHT)
+	if flat.length() < 0.3 and _fire_cooldown > 0.0:
+		return   # standing and shooting: let the fire clip play
+	rig.play_locomotion(local_right, local_forward)
 
 
-# --------------------------------------------------------------------- combat
+# ------------------------------------------------------------------ rifle
 
-func _read_attack_input() -> void:
+func _try_fire() -> void:
+	if _reload_timer > 0.0 or _fire_cooldown > 0.0 or _throw_timer > 0.0:
+		return
+	if ammo <= 0:
+		_start_reload()
+		return
+	ammo -= 1
+	_fire_cooldown = 1.0 / fire_rate
+	ammo_changed.emit(ammo, reserve)
+
+	var cam := _camera.global_transform
+	var direction := -cam.basis.z
+	var origin := cam.origin + direction * maxf((global_position - cam.origin).dot(direction), 0.0)
+	direction = _aim_assist(origin, direction)
+	var spread := deg_to_rad(aim_spread_deg if aiming else spread_deg)
+	direction = direction.rotated(cam.basis.x, randf_range(-spread, spread)).rotated(cam.basis.y, randf_range(-spread, spread))
+
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * rifle_range)
+	query.collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
+	query.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var end := origin + direction * rifle_range
+	if not hit.is_empty():
+		end = hit["position"]
+		var target = hit["collider"]
+		if target and target.has_method(&"take_hit"):
+			target.take_hit(rifle_damage, direction * 1.5, self, false)
+			GameSettings.vibrate(8)
+		elif target is RigidBody3D:
+			(target as RigidBody3D).apply_impulse(direction * 3.0, end - (target as Node3D).global_position)
+		Effects.impact(get_tree(), end)
+	var muzzle := rig.muzzle_position()
+	Effects.muzzle_flash(get_tree(), muzzle)
+	Effects.tracer(get_tree(), muzzle, end)
+	if Vector3(velocity.x, 0.0, velocity.z).length() < 0.3:
+		rig.replay(&"fire")
+	_shake = maxf(_shake, 0.12)
+	_pitch = clampf(_pitch + deg_to_rad(0.35), deg_to_rad(min_pitch_deg), deg_to_rad(max_pitch_deg))   # recoil
+	if Session.mode == Session.MODE_STORY and _heat_timer <= 0.0:
+		WantedSystem.report_crime(WantedSystem.CRIME_GUNFIRE * 0.4, global_position, 3)
+		_heat_timer = 2.0
+	if Session.networked:
+		Net.send_event("shot", {"a": muzzle, "b": end})
+
+
+## Touch-friendly: nudge shots onto a target within a few degrees of the crosshair.
+func _aim_assist(origin: Vector3, direction: Vector3) -> Vector3:
+	var best_dir := direction
+	var best_angle := deg_to_rad(3.5 if aiming else 5.0)
+	var candidates: Array = get_tree().get_nodes_in_group(&"enemies") + get_tree().get_nodes_in_group(&"remote_players")
+	for node in candidates:
+		var target := node as Node3D
+		if target == null or (target.has_method(&"is_alive") and not target.call(&"is_alive")):
+			continue
+		var to_target := target.global_position + Vector3.UP * 1.2 - origin
+		if to_target.length() > rifle_range:
+			continue
+		var angle := direction.angle_to(to_target)
+		if angle < best_angle:
+			best_angle = angle
+			best_dir = to_target.normalized()
+	return best_dir
+
+
+func _start_reload() -> void:
+	if _reload_timer > 0.0 or ammo >= mag_size or reserve <= 0:
+		return
+	_reload_timer = reload_time
+
+
+func add_ammo(amount: int) -> void:
+	reserve += amount
+	ammo_changed.emit(ammo, reserve)
+
+
+# -------------------------------------------------------------- grenades
+
+func _try_throw_grenade() -> void:
+	if grenades <= 0 or _grenade_timer > 0.0 or _throw_timer > 0.0:
+		return
+	grenades -= 1
+	_grenade_timer = grenade_cooldown
+	_throw_timer = 0.8
+	rig.play(&"throw_grenade", 2.2, 0.08)
+	loadout_changed.emit()
+	await get_tree().create_timer(0.55).timeout
+	if not is_inside_tree() or health.is_dead:
+		return
+	var cam_basis := _camera.global_basis
+	var velocity_out := (-cam_basis.z + Vector3.UP * 0.35).normalized() * 16.0 + velocity * 0.5
+	throw_grenade_from(global_position + Vector3.UP * 1.6 - cam_basis.z * 0.6, velocity_out)
+
+
+## Also used while driving (Street Race).
+func throw_grenade_from(origin: Vector3, launch_velocity: Vector3) -> void:
+	var grenade := Grenade.new()
+	grenade.thrower = self
+	get_tree().current_scene.add_child(grenade)
+	grenade.global_position = origin
+	grenade.linear_velocity = launch_velocity
+	if Session.networked:
+		Net.send_event("grenade", {"pos": origin, "vel": launch_velocity})
+
+
+func use_vehicle_grenade() -> bool:
+	if grenades <= 0 or _grenade_timer > 0.0 or current_vehicle == null:
+		return false
+	grenades -= 1
+	_grenade_timer = grenade_cooldown
+	loadout_changed.emit()
+	var car := current_vehicle
+	var back := -car.global_basis.z   # car body drives +Z: lob it behind at the chasers
+	throw_grenade_from(car.global_position + Vector3.UP * 1.6 + back * 2.5, back * 9.0 + Vector3.UP * 5.0 + car.linear_velocity * 0.6)
+	return true
+
+
+func refill_grenades(count: int) -> void:
+	grenades = maxi(grenades, count)
+	loadout_changed.emit()
+
+
+# ----------------------------------------------------------------- surge
+
+func _try_surge() -> void:
+	if _surge_timer > 0.0:
+		return
+	_surge_timer = surge_cooldown
+	Effects.surge(get_tree(), global_position + Vector3.UP, surge_radius)
+	_shake = 0.5
+	GameSettings.vibrate(60)
+	var sphere := SphereShape3D.new()
+	sphere.radius = surge_radius
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = sphere
+	params.transform = Transform3D(Basis(), global_position + Vector3.UP)
+	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
+	params.exclude = [get_rid()]
+	for hit: Dictionary in get_world_3d().direct_space_state.intersect_shape(params, 24):
+		var target = hit.get("collider")
+		if target == null or target == self:
+			continue
+		var offset: Vector3 = (target as Node3D).global_position - global_position
+		var push := (Vector3(offset.x, 0.0, offset.z).normalized() + Vector3.UP * 0.4) * 9.0
+		if target is DrivableCar:
+			(target as DrivableCar).apply_central_impulse(push * (target as DrivableCar).mass * 0.3)
+		elif target.has_method(&"take_hit"):
+			target.take_hit(surge_damage, push, self, true)
+	if Session.networked:
+		Net.send_event("surge", {"pos": global_position + Vector3.UP, "r": surge_radius})
+
+
+# ------------------------------------------------------------------ fists
+
+func _read_punch_input() -> void:
+	if _attacking:
+		return
 	if Input.is_action_just_pressed(&"punch_light"):
-		_buffered_attack = &"light"
-		_buffer_timer = input_buffer_time
+		_start_punch(false)
 	elif Input.is_action_just_pressed(&"punch_heavy"):
-		_buffered_attack = &"heavy"
-		_buffer_timer = input_buffer_time
-
-	if _buffered_attack != &"" and not _attacking and _dodge_timer <= 0.0:
-		_start_attack(_buffered_attack == &"heavy")
-		_buffered_attack = &""
-		_buffer_timer = 0.0
+		_start_punch(true)
 
 
-func _start_attack(heavy: bool) -> void:
+func _start_punch(heavy: bool) -> void:
 	_attacking = true
 	_attack_elapsed = 0.0
 	_attack_hit_done = false
@@ -327,47 +562,49 @@ func _start_attack(heavy: bool) -> void:
 		_attack_active_at = 0.12
 		_attack_duration = 0.34 if _combo_step < light_damage.size() else 0.5
 	_face_nearest_enemy()
-	_animate_punch()
+	var clip := &"punch_heavy" if heavy else StringName("punch_%d" % _combo_step)
+	if not rig.play(clip, 1.0, 0.05):
+		# No punch clips yet: a body lunge so hits still read.
+		var lunge := Vector3(0.0, 0.0, -0.35 if heavy else -0.2).rotated(Vector3.UP, _model_yaw)
+		var tween := create_tween()
+		tween.tween_property(_model, "position", lunge, _attack_active_at)
+		tween.tween_property(_model, "position", Vector3.ZERO, maxf(_attack_duration - _attack_active_at, 0.05))
 
 
-func _update_attack(delta: float) -> void:
+func _update_punch(delta: float) -> void:
 	if not _attacking:
 		_combo_window = maxf(_combo_window - delta, 0.0)
 		return
 	_attack_elapsed += delta
 	if not _attack_hit_done and _attack_elapsed >= _attack_active_at:
 		_attack_hit_done = true
-		_perform_hit()
+		_perform_punch()
 	if _attack_elapsed >= _attack_duration:
 		_attacking = false
-		_combo_window = combo_reset_time
+		_combo_window = 0.45
 
 
 func _is_finisher() -> bool:
 	return _attack_heavy or _combo_step == light_damage.size()
 
 
-func _perform_hit() -> void:
+func _perform_punch() -> void:
 	var forward := Basis(Vector3.UP, _model_yaw) * Vector3.FORWARD
 	var shape := SphereShape3D.new()
 	shape.radius = punch_radius
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = shape
 	params.transform = Transform3D(Basis(), global_position + Vector3.UP * 1.1 + forward * punch_reach)
-	params.collision_mask = ENEMY_LAYER
+	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER
 	params.exclude = [get_rid()]
-
 	var landed := false
 	for hit: Dictionary in get_world_3d().direct_space_state.intersect_shape(params, 8):
 		var target = hit.get("collider")
-		if target == null or not target.has_method(&"take_hit"):
+		if target == null or target == self or not target.has_method(&"take_hit"):
 			continue
-		var knockback := forward * (7.0 if _is_finisher() else 2.5)
-		target.take_hit(_attack_damage, knockback, self, _is_finisher())
-		# Heavy punches count as finishers too (reported as the final combo step).
+		target.take_hit(_attack_damage, forward * (7.0 if _is_finisher() else 2.5), self, _is_finisher())
 		attack_landed.emit(target, _attack_damage, light_damage.size() if _is_finisher() else _combo_step)
 		landed = true
-
 	if landed:
 		_hit_stop(0.08 if _is_finisher() else 0.045)
 		_shake = 0.55 if _is_finisher() else 0.3
@@ -375,6 +612,8 @@ func _perform_hit() -> void:
 
 
 func _hit_stop(duration: float) -> void:
+	if Session.networked:
+		return   # never slow time in multiplayer
 	Engine.time_scale = 0.05
 	await get_tree().create_timer(duration, true, false, true).timeout
 	Engine.time_scale = 1.0
@@ -384,14 +623,14 @@ func _face_nearest_enemy() -> void:
 	var facing := Basis(Vector3.UP, _model_yaw) * Vector3.FORWARD
 	var best: Node3D = null
 	var best_score := INF
-	for node in get_tree().get_nodes_in_group(&"enemies"):
+	for node in get_tree().get_nodes_in_group(&"enemies") + get_tree().get_nodes_in_group(&"remote_players"):
 		var enemy := node as Node3D
 		if enemy == null or (enemy.has_method(&"is_alive") and not enemy.call(&"is_alive")):
 			continue
 		var offset := enemy.global_position - global_position
 		offset.y = 0.0
 		var dist := offset.length()
-		if dist > auto_aim_range or dist < 0.01:
+		if dist > 3.2 or dist < 0.01:
 			continue
 		var alignment := facing.dot(offset / dist)
 		if alignment < -0.2:
@@ -406,9 +645,10 @@ func _face_nearest_enemy() -> void:
 		_model.rotation.y = _model_yaw
 
 
-## Hits from goons, police, etc.
+# ----------------------------------------------------------------- damage
+
 func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool = false) -> void:
-	if health.is_dead or _dodge_timer > 0.0 or current_vehicle:
+	if health.is_dead or current_vehicle:
 		return
 	health.take_damage(damage, attacker)
 	velocity += knockback
@@ -416,33 +656,61 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 	GameSettings.vibrate(40)
 	if heavy:
 		_attacking = false
-	if not _attacking:
-		_hurt_timer = 0.3
-		_play_anim(&"hit")
+	if not _attacking and _action_lock <= 0.0:
+		rig.play(&"hit", 1.0, 0.05)
+		_action_lock = 0.3
+
+
+func _on_net_damage(amount: float, from_peer: int, knockback: Vector3) -> void:
+	last_attacker_peer = from_peer
+	if current_vehicle:
+		current_vehicle.take_vehicle_damage(amount)
+		return
+	take_hit(amount, knockback, null, amount > 40.0)
+
+
+func _on_net_slow(seconds: float) -> void:
+	if current_vehicle:
+		current_vehicle.apply_slow(seconds)
 
 
 func _on_died() -> void:
 	if current_vehicle:
 		current_vehicle.exit()
 	_attacking = false
-	_play_anim(&"knocked_out")
-	if _anim_player == null:
-		create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
+	aiming = false
+	create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
 	knocked_out.emit()
+	if Session.networked:
+		Net.announce_eliminated(multiplayer.get_unique_id(), last_attacker_peer)
+	if not respawn_enabled:
+		return
 	await get_tree().create_timer(respawn_delay).timeout
-	_respawn()
+	if is_inside_tree():
+		_respawn()
 
 
 func _respawn() -> void:
-	global_position = _spawn_point
+	global_position = spawn_point
 	velocity = Vector3.ZERO
 	_model.rotation.x = 0.0
 	health.revive()
-	WantedSystem.clear()
+	ammo = mag_size
+	reserve = maxi(reserve, start_reserve / 2)
+	grenades = maxi(grenades, 1)
+	ammo_changed.emit(ammo, reserve)
+	loadout_changed.emit()
+	if Session.mode == Session.MODE_STORY:
+		WantedSystem.clear()
 	respawned.emit()
 
 
-# ------------------------------------------------------------------ vehicles
+func respawn_at(point: Vector3) -> void:
+	spawn_point = point
+	_respawn()
+
+
+# --------------------------------------------------------------- vehicles
 
 func _update_nearby_vehicle() -> void:
 	var best: DrivableCar = null
@@ -460,16 +728,13 @@ func _update_nearby_vehicle() -> void:
 		nearby_vehicle_changed.emit(nearby_vehicle)
 
 
-## Called by DrivableCar.enter().
 func start_driving(car: DrivableCar) -> void:
 	current_vehicle = car
 	nearby_vehicle = null
 	nearby_vehicle_changed.emit(null)
 	_attacking = false
-	_dodge_timer = 0.0
-	_combo_step = 0
-	_combo_window = 0.0
-	_buffered_attack = &""
+	aiming = false
+	_reload_timer = 0.0
 	velocity = Vector3.ZERO
 	visible = false
 	collision_layer = 0
@@ -479,7 +744,6 @@ func start_driving(car: DrivableCar) -> void:
 	vehicle_changed.emit(car)
 
 
-## Called by DrivableCar.exit().
 func stop_driving(exit_position: Vector3, facing_yaw: float) -> void:
 	current_vehicle = null
 	_left_vehicle_frame = Engine.get_physics_frames()
@@ -496,14 +760,41 @@ func stop_driving(exit_position: Vector3, facing_yaw: float) -> void:
 	vehicle_changed.emit(null)
 
 
-# --------------------------------------------------------------------- camera
+## Cars call this every physics frame while we drive, so other players still see us.
+func send_state_from_vehicle(delta: float) -> void:
+	_send_network_state(delta)
+
+
+# ----------------------------------------------------------------- network
+
+func _send_network_state(delta: float) -> void:
+	if not Session.networked:
+		return
+	_net_timer -= delta
+	if _net_timer > 0.0:
+		return
+	_net_timer = 1.0 / 15.0
+	var state := {
+		"p": global_position, "y": _model_yaw, "c": rig.current_clip(),
+		"s": rig.anim.speed_scale if rig.anim else 1.0, "a": is_armed(), "h": health.current,
+		"ch": GameSettings.character, "alive": is_alive(),
+	}
+	if current_vehicle:
+		state["v"] = current_vehicle.vehicle_id
+		state["vp"] = current_vehicle.global_position
+		state["vq"] = current_vehicle.global_basis.get_rotation_quaternion()
+		state["vc"] = current_vehicle.paint
+	Net.send_state(state)
+
+
+# ----------------------------------------------------------------- camera
 
 func _apply_camera_mode(mode: int, instant: bool = false) -> void:
 	_camera_mode = mode
 	var first_person := mode == GameSettings.FIRST_PERSON
 	var target_length := 0.0 if first_person else third_person_distance
 	var target_offset := 0.0 if first_person else shoulder_offset
-	_set_model_shadow_only(_model, first_person)
+	_set_shadow_only(_model, first_person)
 	if instant:
 		_spring.spring_length = target_length
 		_spring.position.x = target_offset
@@ -513,33 +804,20 @@ func _apply_camera_mode(mode: int, instant: bool = false) -> void:
 	tween.tween_property(_spring, "position:x", target_offset, 0.25)
 
 
-func _set_model_shadow_only(node: Node, shadow_only: bool) -> void:
+func _set_shadow_only(node: Node, shadow_only: bool) -> void:
 	if node is GeometryInstance3D:
 		(node as GeometryInstance3D).cast_shadow = (
 			GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if shadow_only
 			else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		)
 	for child in node.get_children():
-		_set_model_shadow_only(child, shadow_only)
-
-
-# -------------------------------------------------------------- scene building
-
-func _build_collision() -> void:
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.38
-	capsule.height = 1.85
-	var shape := CollisionShape3D.new()
-	shape.shape = capsule
-	shape.position.y = 0.925
-	add_child(shape)
+		_set_shadow_only(child, shadow_only)
 
 
 func _build_camera() -> void:
 	_pivot = Node3D.new()
 	_pivot.name = "CameraPivot"
 	add_child(_pivot)
-
 	_spring = SpringArm3D.new()
 	_spring.name = "SpringArm"
 	_spring.collision_mask = WORLD_LAYER | VEHICLE_LAYER
@@ -549,159 +827,10 @@ func _build_camera() -> void:
 	_spring.shape = probe
 	_spring.add_excluded_object(get_rid())
 	_pivot.add_child(_spring)
-
 	_camera = Camera3D.new()
 	_camera.name = "Camera"
 	_camera.fov = camera_fov
 	_camera.near = 0.05
-	_camera.far = 800.0
+	_camera.far = maxf(GameSettings.view_distance * 1.6, 300.0)
 	_spring.add_child(_camera)
 	_camera.make_current()
-
-
-func _build_model() -> void:
-	_model = Node3D.new()
-	_model.name = "Model"
-	add_child(_model)
-	if model_scene:
-		var holder := Node3D.new()
-		holder.rotation.y = deg_to_rad(model_yaw_offset_deg)
-		_model.add_child(holder)
-		var instance := model_scene.instantiate() as Node3D
-		holder.add_child(instance)
-		_fit_model_height(instance)
-		var players := holder.find_children("*", "AnimationPlayer", true, false)
-		if not players.is_empty():
-			_anim_player = players[0] as AnimationPlayer
-			for clip: StringName in [&"idle", &"walk", &"run"]:
-				if _anim_player.has_animation(clip):
-					_anim_player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
-			_anim_player.play(&"idle")
-		return
-	_build_placeholder_body()
-
-
-## Scales an imported model to `model_height` and puts its feet at y = 0,
-## whatever units the source file used.
-func _fit_model_height(instance: Node3D) -> void:
-	var bounds := _collect_bounds(instance, Transform3D.IDENTITY)
-	if bounds.size.y <= 0.001:
-		return
-	var s := model_height / bounds.size.y
-	instance.scale *= s
-	instance.position = Vector3(-bounds.get_center().x * s, -bounds.position.y * s, -bounds.get_center().z * s)
-
-
-## Bounds of every mesh under `node`, in the space of node's parent.
-func _collect_bounds(node: Node, parent_xform: Transform3D) -> AABB:
-	var xform := parent_xform
-	if node is Node3D:
-		xform = parent_xform * (node as Node3D).transform
-	var result := AABB()
-	var has_result := false
-	if node is MeshInstance3D and (node as MeshInstance3D).mesh:
-		result = xform * (node as MeshInstance3D).mesh.get_aabb()
-		has_result = true
-	for child in node.get_children():
-		var child_bounds := _collect_bounds(child, xform)
-		if child_bounds.size == Vector3.ZERO:
-			continue
-		result = child_bounds if not has_result else result.merge(child_bounds)
-		has_result = true
-	return result
-
-
-## Blocky stand-in matching the concept: chrome armour, dark undersuit,
-## flared boots, pointed shoulder plates.
-func _build_placeholder_body() -> void:
-	var chrome := StandardMaterial3D.new()
-	chrome.albedo_color = Color(0.8, 0.81, 0.84)
-	chrome.metallic = 1.0
-	chrome.roughness = 0.16
-	var undersuit := StandardMaterial3D.new()
-	undersuit.albedo_color = Color(0.07, 0.07, 0.08)
-	undersuit.metallic = 0.5
-	undersuit.roughness = 0.45
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = Color(0.4, 0.24, 0.16)
-	skin.roughness = 0.65
-	var hair := StandardMaterial3D.new()
-	hair.albedo_color = Color(0.1, 0.07, 0.05)
-	hair.roughness = 0.9
-
-	_add_box(Vector3(0.5, 0.55, 0.3), Vector3(0, 1.3, 0), chrome)              # chest
-	_add_box(Vector3(0.36, 0.22, 0.26), Vector3(0, 0.95, 0), chrome)           # pelvis
-	for side: float in [-1.0, 1.0]:
-		_add_box(Vector3(0.15, 0.42, 0.17), Vector3(0.12 * side, 0.68, 0), undersuit)   # thigh
-		_add_box(Vector3(0.26, 0.48, 0.32), Vector3(0.13 * side, 0.24, -0.02), chrome)  # flared boot
-		var pad := _add_box(Vector3(0.24, 0.12, 0.26), Vector3(0.36 * side, 1.58, 0), chrome)
-		pad.rotation.z = deg_to_rad(-25.0 * side)                                       # shoulder plate
-		_add_box(Vector3(0.12, 0.36, 0.12), Vector3(0.37 * side, 1.3, 0), undersuit)    # upper arm
-
-	_fist_l = _add_box(Vector3(0.17, 0.17, 0.34), Vector3(-0.37, 1.02, -0.06), chrome)
-	_fist_r = _add_box(Vector3(0.17, 0.17, 0.34), Vector3(0.37, 1.02, -0.06), chrome)
-	_fist_rest_l = _fist_l.position
-	_fist_rest_r = _fist_r.position
-
-	var head := MeshInstance3D.new()
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.17
-	head_mesh.height = 0.36
-	head.mesh = head_mesh
-	head.material_override = skin
-	head.position = Vector3(0, 1.8, 0)
-	_model.add_child(head)
-
-	var hair_cap := MeshInstance3D.new()
-	var hair_mesh := SphereMesh.new()
-	hair_mesh.radius = 0.18
-	hair_mesh.height = 0.2
-	hair_mesh.is_hemisphere = true
-	hair_cap.mesh = hair_mesh
-	hair_cap.material_override = hair
-	hair_cap.position = Vector3(0, 1.86, 0.01)
-	_model.add_child(hair_cap)
-
-
-func _add_box(size: Vector3, pos: Vector3, material: Material) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = material
-	instance.position = pos
-	_model.add_child(instance)
-	return instance
-
-
-# ------------------------------------------------------------------ animation
-
-func _play_anim(anim_name: StringName, speed: float = 1.0) -> bool:
-	if _anim_player == null or not _anim_player.has_animation(anim_name):
-		return false
-	_anim_player.speed_scale = speed
-	if _anim_player.current_animation != anim_name:
-		var is_action := not (anim_name in [&"idle", &"walk", &"run"])
-		_anim_player.play(anim_name, 0.06 if is_action else 0.15)
-	return true
-
-
-func _animate_punch() -> void:
-	var clip := &"punch_heavy" if _attack_heavy else StringName("punch_%d" % _combo_step)
-	if _play_anim(clip):
-		return
-	if _fist_l == null:
-		# Imported model without animations yet: a quick body lunge so punches still read.
-		var lunge := Vector3(0.0, 0.0, -0.35 if _attack_heavy else -0.2).rotated(Vector3.UP, _model_yaw)
-		var body_tween := create_tween()
-		body_tween.tween_property(_model, "position", lunge, _attack_active_at)
-		body_tween.tween_property(_model, "position", Vector3.ZERO, maxf(_attack_duration - _attack_active_at, 0.05))
-		return
-	var use_right := _attack_heavy or _combo_step % 2 == 1
-	var fist := _fist_r if use_right else _fist_l
-	var rest := _fist_rest_r if use_right else _fist_rest_l
-	var reach := Vector3(0.0, 0.12, -0.8 if _attack_heavy else -0.65)
-	var tween := create_tween()
-	tween.tween_property(fist, "position", rest + reach, _attack_active_at) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(fist, "position", rest, maxf(_attack_duration - _attack_active_at, 0.05))

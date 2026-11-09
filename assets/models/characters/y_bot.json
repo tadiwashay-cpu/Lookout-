@@ -1,0 +1,66 @@
+{
+ "throw_grenade": {
+  "length": 3.2,
+  "ground_speed": 0.004
+ },
+ "jump": {
+  "length": 0.6,
+  "ground_speed": 0.003
+ },
+ "run_back": {
+  "length": 0.533,
+  "ground_speed": 2.534
+ },
+ "strafe_left_run": {
+  "length": 0.533,
+  "ground_speed": 2.594
+ },
+ "walk": {
+  "length": 1.367,
+  "ground_speed": 0.918
+ },
+ "turn_right": {
+  "length": 1.0,
+  "ground_speed": 0.0
+ },
+ "run": {
+  "length": 0.733,
+  "ground_speed": 2.904
+ },
+ "walk_back": {
+  "length": 1.4,
+  "ground_speed": 1.011
+ },
+ "hit": {
+  "length": 0.433,
+  "ground_speed": 0.001
+ },
+ "fire": {
+  "length": 0.267,
+  "ground_speed": 0.0
+ },
+ "reload": {
+  "length": 3.3,
+  "ground_speed": 0.0
+ },
+ "strafe_right_run": {
+  "length": 0.667,
+  "ground_speed": 3.038
+ },
+ "turn_left": {
+  "length": 0.9,
+  "ground_speed": 0.035
+ },
+ "strafe_left": {
+  "length": 0.933,
+  "ground_speed": 1.26
+ },
+ "strafe_right": {
+  "length": 1.4,
+  "ground_speed": 0.701
+ },
+ "idle": {
+  "length": 3.0,
+  "ground_speed": 0.0
+ }
+}

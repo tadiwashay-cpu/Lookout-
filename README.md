@@ -5,13 +5,15 @@ Open-world anti-hero action game for **Android**, built with **Godot 4 (Mobile r
 - Design: [`docs/game-design.md`](docs/game-design.md)
 - Art direction: [`docs/art-direction.md`](docs/art-direction.md)
 - Hero model pipeline: [`docs/character-pipeline.md`](docs/character-pipeline.md)
+- Multiplayer: [`docs/multiplayer.md`](docs/multiplayer.md)
 - Third-party asset credits: [`CREDITS.md`](CREDITS.md)
 
 ## Run it
 1. Install Godot **4.4 or newer**. The Android editor app works.
 2. Project Manager → **Import** → choose `project.godot`.
-3. Press **Play**. The main scene is the *Clean Hands* market district
-   greybox: `scenes/levels/test_city.tscn`.
+3. Press **Play**. You start at the **main menu**: pick **X** or **Y Bot**,
+   then **Story** (you spawn in the crew's HQ), **Multiplayer** or
+   **Settings**.
 
 ## Controls
 | | Touch (Android) | Keyboard / mouse | Gamepad |

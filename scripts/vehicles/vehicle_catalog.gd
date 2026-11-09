@@ -8,16 +8,16 @@ extends RefCounted
 ## (see CREDITS.md). Split into per-car files by tools/split_cars.py.
 
 const RANK_STATS := {
-	# engine: Godot VehicleBody3D units, per driven wheel of a 2-wheel-drive
-	# 1000 kg car (Godot docs: 25-50 is a sensible range). Scaled by mass
-	# and split across driven wheels in DrivableCar. brake: same units.
+	# accel: m/s^2 at full throttle (applied directly as a force, so it's
+	# the same whatever the car weighs). decel: braking in m/s^2.
+	# brake: wheel brake (Godot units) used to hold parked cars.
 	# top_speed: m/s (x3.6 for km/h). grip: tyre friction slip.
 	# spawn_weight: relative chance to appear parked in the city.
-	"D": {"engine": 30.0, "top_speed": 36.0, "brake": 22.0, "steer": 0.52, "grip": 2.6, "health": 600.0, "spawn_weight": 30.0},
-	"C": {"engine": 38.0, "top_speed": 42.0, "brake": 24.0, "steer": 0.54, "grip": 2.8, "health": 700.0, "spawn_weight": 30.0},
-	"B": {"engine": 46.0, "top_speed": 47.0, "brake": 26.0, "steer": 0.55, "grip": 3.0, "health": 800.0, "spawn_weight": 14.0},
-	"A": {"engine": 58.0, "top_speed": 58.0, "brake": 28.0, "steer": 0.57, "grip": 3.4, "health": 850.0, "spawn_weight": 5.0},
-	"S": {"engine": 75.0, "top_speed": 72.0, "brake": 30.0, "steer": 0.6, "grip": 3.9, "health": 900.0, "spawn_weight": 1.0},
+	"D": {"accel": 3.4, "decel": 8.5, "top_speed": 36.0, "brake": 22.0, "steer": 0.52, "grip": 2.6, "health": 600.0, "spawn_weight": 30.0},
+	"C": {"accel": 4.1, "decel": 9.0, "top_speed": 42.0, "brake": 24.0, "steer": 0.54, "grip": 2.8, "health": 700.0, "spawn_weight": 30.0},
+	"B": {"accel": 4.8, "decel": 9.5, "top_speed": 47.0, "brake": 26.0, "steer": 0.55, "grip": 3.0, "health": 800.0, "spawn_weight": 14.0},
+	"A": {"accel": 6.0, "decel": 10.0, "top_speed": 58.0, "brake": 28.0, "steer": 0.57, "grip": 3.4, "health": 850.0, "spawn_weight": 5.0},
+	"S": {"accel": 7.8, "decel": 11.0, "top_speed": 72.0, "brake": 30.0, "steer": 0.6, "grip": 3.9, "health": 900.0, "spawn_weight": 1.0},
 }
 
 ## drive: "rwd" | "fwd" | "awd"

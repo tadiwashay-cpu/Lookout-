@@ -18,3 +18,7 @@ Thumbs.db
 *.blend1
 *.blend2
 *.tmp
+
+# Python
+__pycache__/
+*.pyc

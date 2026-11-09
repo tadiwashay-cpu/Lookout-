@@ -20,7 +20,17 @@ problem, and the police will treat you accordingly.
 4. **AAA *feel* on a tablet.** We don't brute-force fidelity. We win on
    lighting, animation, audio, camera and art direction (see §9).
 
-## 3. The hero
+## 2b. Characters
+Players choose **X Bot** or **Y Bot** in the main menu; the choice is
+shown to other players too. (The earlier chrome hero concept is retired.)
+Animations: Mixamo rifle set (idle, walk, run, backwards, strafes, fire,
+reload, jump, grenade toss, hit, turns). **Still needed from Mixamo:**
+unarmed punches (Jab, Cross, Hook, Uppercut), Dodge/Roll, Knocked Out /
+Death, Unarmed Idle, Driving pose. Name the files `punch_1`, `punch_2`,
+`punch_3`, `punch_heavy`, `dodge`, `knocked_out`, `idle_unarmed` and run
+`tools/convert_mixamo.py`; the game picks them up by name.
+
+## 3. The hero (retired concept, kept for reference)
 - Concept: `docs/concept/hero_concept_front.jpg`. Polished chrome armour
   over a dark undersuit, pointed shoulder plates, flared boots,
   "WS" chest emblem, "$" emblem on the shins.
@@ -54,7 +64,25 @@ problem, and the police will treat you accordingly.
 - Reputation (M2) changes how civilians react (cheer, flee, call cops)
   and which missions open up.
 
-## 6. World: Port Halden
+## 6. World: Port Halden (built)
+Everything is connected, and the map is about 1.7 × 2.1 km:
+- **City**: Brooklyn-style grid. Brownstone rows with stoops (west),
+  brick tenements and DUMBO-like warehouses (centre and waterfront),
+  stepped towers downtown (north-east), plus a park, First Harbor Bank,
+  the 84th Precinct, and **THE LOOKOUT** (the crew's HQ, where the story
+  starts).
+- **Harbour**: quay, container yard, gantry cranes, two piers and a
+  docked cargo ship, directly east of the city.
+- **Highway**: four lanes curving north from the city past the harbour
+  into the forest, with guardrails and lights.
+- **Forest**: hills, about 1,800 pines, a dirt road and a ranger lookout
+  tower.
+- **Suburb**: west of the forest, with houses, lawns, driveways and
+  fences.
+
+Multiplayer spawns: harbour, suburb, forest, highway.
+
+### Original region notes
 A grey, rust-belt harbour city on a cold northern coast.
 
 | Zone | Description | Gameplay |
