@@ -123,7 +123,7 @@ func _process(delta: float) -> void:
 func _on_event(kind: String, data: Dictionary) -> void:
 	if kind != "race_finish":
 		return
-	_results.append({"name": str(data.get("name", "?")), "time": float(data.get("time", 0.0))})
+	_results.append({"name": str(data.get("name", "?")), "time": float(data.get("time", 0.0)), "peer": int(data.get("sender", 0))})
 	_results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["time"] < b["time"])
 	if _finish_deadline < 0.0:
 		_finish_deadline = _time + 45.0
@@ -138,7 +138,7 @@ func _finish() -> void:
 	for i in _results.size():
 		var r: Dictionary = _results[i]
 		lines.append("%d. %s  %s" % [i + 1, r["name"], _fmt(r["time"])])
-		if r["name"] == GameSettings.player_name and my_place == 0:
+		if int(r["peer"]) == Session.my_id() and my_place == 0:
 			my_place = i + 1
 	var won := my_place == 1
 	hud().show_hint("\n".join(lines))

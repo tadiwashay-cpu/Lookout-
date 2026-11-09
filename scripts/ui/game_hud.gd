@@ -205,7 +205,17 @@ func _build_pause_menu() -> void:
 	_root.add_child(_pause_panel)
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"pause"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if _pause_panel.visible:
+			_close_pause()
+		else:
+			_open_pause()
+
+
 func _open_pause() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_pause_panel.visible = true
 	if not Session.networked:
 		get_tree().paused = true

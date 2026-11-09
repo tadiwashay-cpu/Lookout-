@@ -16,6 +16,7 @@ var _extract_region := ""
 var _time := 0.0
 var _robbers_alive: Dictionary = {}
 var _zone_ring: MeshInstance3D
+var _sent_escape := false
 
 
 func begin() -> void:
@@ -73,7 +74,8 @@ func _process(delta: float) -> void:
 	set_status("%s   •   Robbers left %d   •   %d:%02d" % [_team.to_upper(), _robbers_alive.size(), int(left) / 60, int(left) % 60])
 	var p := player()
 	var where := p.current_vehicle.global_position if p.current_vehicle else p.global_position
-	if _team == "robbers" and p.is_alive() and where.distance_to(_extract) < EXTRACT_RADIUS:
+	if _team == "robbers" and p.is_alive() and not _sent_escape and where.distance_to(_extract) < EXTRACT_RADIUS:
+		_sent_escape = true
 		Net.send_event("heist_escaped", {"name": GameSettings.player_name})
 	if left <= 0.0:
 		_resolve(false)

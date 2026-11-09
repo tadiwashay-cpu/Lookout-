@@ -26,6 +26,8 @@ var _layout_key := ""
 
 
 func _ready() -> void:
+	# Keep receiving touch-ups while the game is paused so nothing stays held.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")

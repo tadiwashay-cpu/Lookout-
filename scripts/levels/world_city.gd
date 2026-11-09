@@ -202,7 +202,7 @@ func _hq(c: Vector3) -> void:
 	b.box(Vector3(t, size.y, size.z), Vector3(center.x - size.x * 0.5, size.y * 0.5, center.z), "brick_dark")
 	b.box(Vector3(t, size.y, size.z), Vector3(center.x + size.x * 0.5, size.y * 0.5, center.z), "brick_dark")
 	b.box(Vector3(size.x + 1.0, 0.6, size.z + 1.0), Vector3(center.x, size.y + 0.3, center.z), "roof")
-	b.box(Vector3(size.x - 1.0, 0.1, size.z - 1.0), Vector3(center.x, 0.17, center.z), "concrete", false)
+	b.box(Vector3(size.x - 1.0, 0.04, size.z - 1.0), Vector3(center.x, 0.13, center.z), "concrete", false)
 	# Inside: briefing table, lockers, workbench.
 	b.box(Vector3(6.0, 0.9, 3.0), center + Vector3(-8, 0.45, 6), "metal")
 	b.box(Vector3(10.0, 2.2, 0.8), center + Vector3(-15, 1.1, 14.5), "metal")

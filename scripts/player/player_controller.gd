@@ -6,7 +6,7 @@ extends CharacterBody3D
 ##    RELOAD, GRENADE, SURGE (power-surge blast)
 ##  * unarmed (fists): punch combos — used when weapons are locked
 ##    (e.g. the Clean Hands mission)
-##  * cars: walk up and press ENTER
+##  * cars: walk up and tap ENTER (E / F on a keyboard)
 ## Health, damage and deaths are reported over the network in multiplayer.
 
 signal attack_landed(target: Node3D, damage: float, combo_step: int)
@@ -681,8 +681,9 @@ func _on_died() -> void:
 	aiming = false
 	create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
 	knocked_out.emit()
-	if Session.networked:
-		Net.announce_eliminated(multiplayer.get_unique_id(), last_attacker_peer)
+	if Session.mode != Session.MODE_STORY:
+		# Works offline too (solo practice): Net emits locally when not connected.
+		Net.announce_eliminated(Session.my_id(), last_attacker_peer)
 	if not respawn_enabled:
 		return
 	await get_tree().create_timer(respawn_delay).timeout

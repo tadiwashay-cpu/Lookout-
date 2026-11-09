@@ -162,7 +162,7 @@ func send_damage(target_peer: int, amount: float, knockback: Vector3 = Vector3.Z
 
 @rpc("any_peer", "reliable")
 func _damage(amount: float, knockback: Vector3) -> void:
-	damage_received.emit(clampf(amount, 0.0, 200.0), multiplayer.get_remote_sender_id(), knockback)
+	damage_received.emit(clampf(amount, 0.0, 200.0), multiplayer.get_remote_sender_id(), knockback.limit_length(20.0))
 
 
 func send_slow(target_peer: int, seconds: float) -> void:

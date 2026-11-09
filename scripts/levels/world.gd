@@ -409,15 +409,14 @@ func _spawn_player() -> void:
 	player = PLAYER_SCENE.instantiate() as PlayerController
 	var spawn := hq_spawn
 	var yaw := 0.0
-	match Session.mode:
-		Session.MODE_BATTLE_ROYALE:
-			var region := Session.spawn_region_for(Session.my_id())
-			spawn = random_point_in(region, Session.match_rng(Session.my_id()))
-		Session.MODE_HEIST:
-			if Session.team_of(Session.my_id()) == "police":
-				spawn = precinct_position + Vector3(Session.match_rng(Session.my_id()).randf_range(-6, 6), 0.3, -2.0)
-			else:
-				spawn = bank_position + Vector3(Session.match_rng(Session.my_id()).randf_range(-5, 5), 0.3, 1.0)
+	if Session.mode == Session.MODE_BATTLE_ROYALE:
+		var region := Session.spawn_region_for(Session.my_id())
+		spawn = random_point_in(region, Session.match_rng(Session.my_id()))
+	elif Session.mode == Session.MODE_HEIST:
+		if Session.team_of(Session.my_id()) == "police":
+			spawn = precinct_position + Vector3(Session.match_rng(Session.my_id()).randf_range(-6, 6), 0.3, -2.0)
+		else:
+			spawn = bank_position + Vector3(Session.match_rng(Session.my_id()).randf_range(-5, 5), 0.3, 1.0)
 	player.position = spawn + Vector3.UP * 0.3
 	player.rotation.y = yaw
 	add_child(player)
@@ -438,15 +437,14 @@ func _build_ui() -> void:
 
 
 func _start_mode() -> void:
-	match Session.mode:
-		Session.MODE_BATTLE_ROYALE:
-			mode = BattleRoyaleMode.new()
-		Session.MODE_STREET_RACE:
-			mode = StreetRaceMode.new()
-		Session.MODE_HEIST:
-			mode = HeistMode.new()
-		_:
-			mode = StoryMode.new()
+	if Session.mode == Session.MODE_BATTLE_ROYALE:
+		mode = BattleRoyaleMode.new()
+	elif Session.mode == Session.MODE_STREET_RACE:
+		mode = StreetRaceMode.new()
+	elif Session.mode == Session.MODE_HEIST:
+		mode = HeistMode.new()
+	else:
+		mode = StoryMode.new()
 	mode.name = "Mode"
 	mode.world = self
 	add_child(mode)

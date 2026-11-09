@@ -76,11 +76,17 @@ func _enter_tree() -> void:
 		button_event.button_index = PAD_BUTTONS[action]
 		InputMap.action_add_event(action, button_event)
 
-	for action: StringName in MOUSE_BUTTONS:
-		_ensure_action(action)
-		var mouse_event := InputEventMouseButton.new()
-		mouse_event.button_index = MOUSE_BUTTONS[action]
-		InputMap.action_add_event(action, mouse_event)
+	# Touch screens emulate mouse clicks from taps; binding the mouse there
+	# would make every tap fire the rifle.
+	if not DisplayServer.is_touchscreen_available():
+		for action: StringName in MOUSE_BUTTONS:
+			_ensure_action(action)
+			var mouse_event := InputEventMouseButton.new()
+			mouse_event.button_index = MOUSE_BUTTONS[action]
+			InputMap.action_add_event(action, mouse_event)
+	else:
+		for action: StringName in MOUSE_BUTTONS:
+			_ensure_action(action)
 
 	for action: StringName in PAD_AXES:
 		_ensure_action(action)
