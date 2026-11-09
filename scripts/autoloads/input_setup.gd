@@ -25,6 +25,7 @@ const KEY_BINDINGS := {
 	&"grenade": [KEY_G],
 	&"surge": [KEY_X],
 	&"swap_weapon": [KEY_TAB, KEY_1],
+	&"block": [KEY_C],
 	&"pause": [KEY_ESCAPE],
 }
 
@@ -40,6 +41,7 @@ const PAD_BUTTONS := {
 	&"grenade": JOY_BUTTON_DPAD_UP,
 	&"surge": JOY_BUTTON_DPAD_DOWN,
 	&"swap_weapon": JOY_BUTTON_DPAD_LEFT,
+	&"block": JOY_BUTTON_LEFT_SHOULDER,
 	&"pause": JOY_BUTTON_START,
 }
 

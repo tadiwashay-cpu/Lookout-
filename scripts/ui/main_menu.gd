@@ -6,7 +6,10 @@ extends Control
 var _cards: Dictionary = {}
 var _main: VBoxContainer
 var _mp_panel: PanelContainer
-var _mode_select: OptionButton
+var _mode_buttons: Array[Button] = []
+var _shop_title: Label
+var _shop_list: VBoxContainer
+var _selected := 0
 var _ip_edit: LineEdit
 var _lobby_list: Label
 var _lobby_info: Label
@@ -59,7 +62,7 @@ func _ready() -> void:
 	_main.custom_minimum_size.x = 520
 	_main.alignment = BoxContainer.ALIGNMENT_CENTER
 	layout.add_child(_main)
-	for entry: Array in [["STORY", _on_story], ["MULTIPLAYER", _on_multiplayer], ["SETTINGS", _on_settings], ["QUIT", _on_quit]]:
+	for entry: Array in [["STORY", _on_story], ["MULTIPLAYER", _on_multiplayer], ["SHOP", _on_shop], ["SETTINGS", _on_settings], ["QUIT", _on_quit]]:
 		var button := Button.new()
 		button.text = entry[0]
 		button.custom_minimum_size.y = 96
@@ -135,6 +138,71 @@ func _on_multiplayer() -> void:
 	_mp_panel.visible = true
 
 
+func _on_shop() -> void:
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -620
+	panel.offset_right = 620
+	panel.offset_top = -420
+	panel.offset_bottom = 420
+	add_child(panel)
+	var root := VBoxContainer.new()
+	panel.add_child(root)
+	_shop_title = Label.new()
+	_shop_title.add_theme_font_size_override("font_size", 46)
+	root.add_child(_shop_title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(scroll)
+	_shop_list = VBoxContainer.new()
+	_shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_shop_list)
+	var close := Button.new()
+	close.text = "CLOSE"
+	close.pressed.connect(panel.queue_free)
+	root.add_child(close)
+	_rebuild_shop()
+
+
+func _rebuild_shop() -> void:
+	_shop_title.text = "GUN SHOP   —   $%d" % GameSettings.money
+	_money.text = "$%d" % GameSettings.money
+	for child in _shop_list.get_children():
+		child.queue_free()
+	for id: String in WeaponCatalog.shop_ids():
+		var data := WeaponCatalog.get_data(id)
+		var row := HBoxContainer.new()
+		var info := Label.new()
+		info.text = "%s  (%s)   dmg %d  •  %d rpm  •  mag %d" % [data["name"], str(data["class"]).to_upper(), int(data["damage"]) * int(data["pellets"]), int(float(data["rate"]) * 60.0), int(data["mag"])]
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_font_size_override("font_size", 26)
+		row.add_child(info)
+		var action := Button.new()
+		action.custom_minimum_size.x = 260
+		if GameSettings.equipped_weapon == id:
+			action.text = "EQUIPPED"
+			action.disabled = true
+		elif GameSettings.owned_weapons.has(id):
+			action.text = "EQUIP"
+			action.pressed.connect(_shop_equip.bind(id))
+		else:
+			action.text = "BUY $%d" % int(data["price"])
+			action.disabled = GameSettings.money < int(data["price"])
+			action.pressed.connect(_shop_buy.bind(id))
+		row.add_child(action)
+		_shop_list.add_child(row)
+
+
+func _shop_equip(id: String) -> void:
+	GameSettings.equip_weapon(id)
+	_rebuild_shop()
+
+
+func _shop_buy(id: String) -> void:
+	GameSettings.buy_weapon(id)
+	_rebuild_shop()
+
+
 func _on_settings() -> void:
 	var panel := SettingsPanel.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -168,17 +236,23 @@ func _build_multiplayer_panel() -> void:
 	title.add_theme_font_size_override("font_size", 48)
 	box.add_child(title)
 
+	# Big tap targets instead of a dropdown (dropdowns are fiddly on touch).
 	var mode_row := HBoxContainer.new()
-	var mode_label := Label.new()
-	mode_label.text = "Mode"
-	mode_label.custom_minimum_size.x = 160
-	mode_row.add_child(mode_label)
-	_mode_select = OptionButton.new()
-	for m: int in MP_MODES:
-		_mode_select.add_item(Session.MODE_NAMES[m])
-	_mode_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mode_row.add_child(_mode_select)
+	for i in MP_MODES.size():
+		var button := Button.new()
+		button.text = Session.MODE_NAMES[MP_MODES[i]]
+		button.toggle_mode = true
+		button.custom_minimum_size.y = 80
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(_pick_mode.bind(i))
+		mode_row.add_child(button)
+		_mode_buttons.append(button)
 	box.add_child(mode_row)
+	_refresh_mode_buttons()
+	Net.lobby_mode_changed.connect(func(mode: int) -> void:
+		_selected = maxi(MP_MODES.find(mode), 0)
+		_refresh_mode_buttons()
+	)
 
 	var buttons := HBoxContainer.new()
 	box.add_child(buttons)
@@ -228,7 +302,24 @@ func _build_multiplayer_panel() -> void:
 
 
 func _selected_mode() -> int:
-	return MP_MODES[_mode_select.selected]
+	return MP_MODES[_selected]
+
+
+func _pick_mode(index: int) -> void:
+	# Joined players can't change the host's mode.
+	if Net.is_active() and not multiplayer.is_server():
+		_refresh_mode_buttons()
+		return
+	_selected = index
+	Net.set_lobby_mode(MP_MODES[index])
+	_refresh_mode_buttons()
+	if Net.is_active():
+		_lobby_info.text = "Hosting %s. Friends join with: %s" % [Session.MODE_NAMES[_selected_mode()], ", ".join(Net.local_addresses())]
+
+
+func _refresh_mode_buttons() -> void:
+	for i in _mode_buttons.size():
+		_mode_buttons[i].button_pressed = i == _selected
 
 
 func _on_host() -> void:

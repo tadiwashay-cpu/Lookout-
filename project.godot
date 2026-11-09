@@ -39,6 +39,10 @@ pointing/emulate_touch_from_mouse=false
 3d_physics/layer_5="civilians"
 3d_physics/layer_6="vehicles"
 
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
 [rendering]
 
 renderer/rendering_method="mobile"

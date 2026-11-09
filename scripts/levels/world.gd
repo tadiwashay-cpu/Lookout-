@@ -43,6 +43,12 @@ var _car_spots: Array[Vector3] = []
 var _remote: Dictionary = {}          # peer_id -> RemoteAvatar
 var _sun: DirectionalLight3D
 var _env: Environment
+var _sky: ProceduralSkyMaterial
+var nature: WorldNature
+var day_night: DayNight
+var police: PoliceManager
+var _road_points: Array[Vector3] = []
+var _a_class_count := 0
 
 
 func _ready() -> void:
@@ -55,11 +61,25 @@ func _ready() -> void:
 	city.build()
 	regions = WorldRegions.new(self)
 	regions.build()
+	nature = WorldNature.new(self)
+	nature.build()
 	_flush_trees()
 	batcher.finish()
 	_spawn_cars()
 	_spawn_player()
 	_build_ui()
+	day_night = DayNight.new()
+	day_night.name = "DayNight"
+	day_night.world = self
+	day_night.sun = _sun
+	day_night.env = _env
+	day_night.sky = _sky
+	day_night.nature = nature
+	add_child(day_night)
+	day_night.setup()
+	var blur := MotionBlur.new()
+	blur.speed_source = func() -> float: return player.current_vehicle.linear_velocity.length() if player.current_vehicle else 0.0
+	add_child(blur)
 	_start_mode()
 	if Session.networked:
 		_setup_network()
@@ -190,6 +210,7 @@ func _build_environment() -> void:
 	sky_material.ground_bottom_color = Color(0.18, 0.17, 0.16)
 	var sky := Sky.new()
 	sky.sky_material = sky_material
+	_sky = sky_material
 	_env = Environment.new()
 	_env.background_mode = Environment.BG_SKY
 	_env.sky = sky
@@ -214,7 +235,7 @@ func _build_environment() -> void:
 
 
 func _apply_graphics() -> void:
-	_sun.shadow_enabled = GameSettings.shadows_enabled
+	_sun.shadow_enabled = GameSettings.shadows_enabled and _sun.light_energy > 0.1
 	_sun.directional_shadow_max_distance = clampf(GameSettings.view_distance * 0.2, 40.0, 110.0)
 	_env.fog_density = 2.2 / maxf(GameSettings.view_distance, 100.0)
 	if player:
@@ -371,6 +392,44 @@ func _spot_free(pos: Vector3) -> bool:
 	return true
 
 
+## No S-class in normal parking, and only a few A-class cars on the map.
+func _limit_rank(id: String) -> String:
+	var rank: String = VehicleCatalog.VEHICLES[id]["rank"]
+	if rank == "S":
+		return "hatchback"
+	if rank == "A":
+		_a_class_count += 1
+		if _a_class_count > 3:
+			return "suv"
+	return id
+
+
+## Points on drivable roads (police spawns, roadblocks).
+func road_points() -> Array[Vector3]:
+	if not _road_points.is_empty():
+		return _road_points
+	for ix in WorldCity.BLOCKS_X + 1:
+		var z := -WorldCity.HALF_Z + 12.0
+		while z < WorldCity.HALF_Z - 12.0:
+			_road_points.append(Vector3(WorldCity.street_x(ix), 0.3, z))
+			z += 25.0
+	for iz in WorldCity.BLOCKS_Z + 1:
+		var x := -WorldCity.HALF_X + 12.0
+		while x < WorldCity.HALF_X - 12.0:
+			_road_points.append(Vector3(x, 0.3, WorldCity.street_z(iz)))
+			x += 25.0
+	for i in range(0, regions.highway_samples.size(), 3):
+		_road_points.append(regions.highway_samples[i] + Vector3.UP * 0.3)
+	for i in range(0, regions.forest_road_samples.size(), 2):
+		var p := regions.forest_road_samples[i]
+		_road_points.append(Vector3(p.x, ground_height(p.x, p.z) + 0.3, p.z))
+	var x := WorldRegions.SUBURB_RECT.position.x + 10.0
+	while x < WorldRegions.SUBURB_RECT.end.x:
+		_road_points.append(Vector3(x, 0.3, WorldRegions.SUBURB_MAIN_Z))
+		x += 20.0
+	return _road_points
+
+
 func _spawn_cars() -> void:
 	if Session.mode == Session.MODE_STREET_RACE:
 		return   # race cars only
@@ -381,8 +440,19 @@ func _spawn_cars() -> void:
 	# Police at the precinct
 	_spawn_car("police_sedan", precinct_position + Vector3(-6, 0, 0), PI * 0.5)
 	_spawn_car("police_suv", precinct_position + Vector3(4, 0, 0), PI * 0.5)
-	# The hidden S-class car
-	_spawn_car("sport", supercar_spot, 0.0, VehicleCatalog.random_paint(rng))
+	# The S-class car is genuinely rare: at most one in the whole map, only
+	# in some sessions, in one of a few hidden spots that changes each time.
+	var luck := RandomNumberGenerator.new()
+	luck.randomize()
+	if Session.mode == Session.MODE_STORY and luck.randf() < 0.45:
+		var hidden: Array[Vector3] = [
+			supercar_spot,
+			Vector3(-372.0, ground_height(-372.0, -1462.0) + 0.5, -1462.0),             # by the ranger tower
+			extraction_points.get("suburb", supercar_spot),                            # end of the suburb street
+			regions.highway_samples[regions.highway_samples.size() / 3] + Vector3(14, 0.3, 0),   # highway lay-by
+			WorldCity.block_center(5, 0) + Vector3(0, 0.3, WorldCity.BLOCK_D * 0.5 + 2.0),       # downtown side street
+		]
+		_spawn_car("sport", hidden[luck.randi() % hidden.size()], luck.randf() * TAU, VehicleCatalog.random_paint(luck))
 	# City kerbside parking: about one per block
 	for ix in WorldCity.BLOCKS_X:
 		for iz in WorldCity.BLOCKS_Z:
@@ -391,16 +461,14 @@ func _spawn_cars() -> void:
 			var pos := c + Vector3(rng.randf_range(-26.0, 26.0), 0.0, side * (WorldCity.BLOCK_D * 0.5 + 2.0))
 			if not _spot_free(pos):
 				continue
-			var id := VehicleCatalog.pick_civilian(rng)
-			if id == "sport":
-				id = "coupe"
+			var id := _limit_rank(VehicleCatalog.pick_civilian(rng))
 			_spawn_car(id, pos, PI * 0.5 + (PI if rng.randf() > 0.5 else 0.0), VehicleCatalog.random_paint(rng))
 	# Suburb driveways
 	for parked in _parked:
 		var pos: Vector3 = parked["pos"]
 		if _spot_free(pos):
-			var id := VehicleCatalog.pick_civilian(rng)
-			_spawn_car("compact" if id == "sport" else id, pos, parked["yaw"], VehicleCatalog.random_paint(rng))
+			var id := _limit_rank(VehicleCatalog.pick_civilian(rng))
+			_spawn_car(id, pos, parked["yaw"], VehicleCatalog.random_paint(rng))
 
 
 # ---------------------------------------------------------------- player
@@ -434,6 +502,15 @@ func _build_ui() -> void:
 	touch = TouchControls.new()
 	touch.player = player
 	touch_layer.add_child(touch)
+	if Session.mode == Session.MODE_STORY:
+		police = PoliceManager.new()
+		police.name = "Police"
+		police.world = self
+		add_child(police)
+		var crowd := PedestrianManager.new()
+		crowd.name = "Pedestrians"
+		crowd.world = self
+		add_child(crowd)
 
 
 func _start_mode() -> void:

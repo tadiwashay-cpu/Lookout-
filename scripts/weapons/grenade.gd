@@ -65,7 +65,7 @@ func _apply_blast() -> void:
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = sphere
 	params.transform = Transform3D(Basis(), global_position)
-	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
+	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER | 16   # 16 = civilians
 	params.exclude = [get_rid()]
 	var done := {}
 	for hit: Dictionary in get_world_3d().direct_space_state.intersect_shape(params, 32):

@@ -25,6 +25,15 @@ const CAR_SCENE_DISTANCE := 140.0   # meshes fade out beyond this (mobile draw c
 ## Street Race: the driver can't get out.
 @export var locked := false
 
+## AI drivers (police pursuit, race bots) set these instead of the player's input.
+var ai_enabled := false
+var ai_throttle := 0.0
+var ai_reverse := 0.0
+var ai_steer := 0.0          # -1 right .. +1 left (same as the player's axis)
+var ai_handbrake := false
+var ai_top_speed_scale := 1.0
+var _upside_down_time := 0.0
+
 var data: Dictionary
 var driver: PlayerController
 var has_been_stolen := false
@@ -44,6 +53,9 @@ var _light_bar: Array[MeshInstance3D] = []
 var _siren_time := 0.0
 var _roof_height := 1.4
 var _entered_frame := -1
+var _own_lights: MeshInstance3D
+var _lights_material: StandardMaterial3D
+var siren_on := false
 
 const _PAINT_SHADER := preload("res://assets/materials/shaders/car_paint.gdshader")
 
@@ -57,7 +69,7 @@ func _ready() -> void:
 	collision_layer = VEHICLE_LAYER
 	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, 0.42, 0.0)
+	center_of_mass = Vector3(0.0, 0.28, 0.0)   # low: resists rolling in sharp turns
 	contact_monitor = false   # only while driven (mobile perf)
 	max_contacts_reported = 4
 	body_entered.connect(_on_body_entered)
@@ -68,8 +80,13 @@ func _ready() -> void:
 		paint = VehicleCatalog.POLICE_PAINT.get(vehicle_id, Color(0.05, 0.05, 0.06))
 	if paint.a > 0.0:
 		_apply_paint(paint)
-	if is_police:
+	if is_police and _own_lights == null:
 		_build_light_bar()
+	elif _own_lights:
+		_lights_material = StandardMaterial3D.new()
+		_lights_material.emission_enabled = true
+		_own_lights.material_override = _lights_material
+		_set_light_bar(0.0)
 
 
 # ------------------------------------------------------------------ building
@@ -86,6 +103,17 @@ func _build_from_model() -> void:
 	var model := scene.instantiate() as Node3D
 	holder.add_child(model)
 
+	var colors: Dictionary = data.get("colors", {})
+	if not colors.is_empty():
+		for node in model.find_children("*", "MeshInstance3D", true, false):
+			var mesh_instance := node as MeshInstance3D
+			for s in mesh_instance.mesh.get_surface_count():
+				var original := mesh_instance.mesh.surface_get_material(s) as StandardMaterial3D
+				if original and colors.has(original.resource_name):
+					var tinted := original.duplicate() as StandardMaterial3D
+					tinted.albedo_color = colors[original.resource_name]
+					mesh_instance.set_surface_override_material(s, tinted)
+	_own_lights = model.find_child("Lights", true, false) as MeshInstance3D
 	var body_mesh := model.find_child("Body", true, false) as MeshInstance3D
 	if body_mesh:
 		_add_body_collision(body_mesh)
@@ -98,17 +126,19 @@ func _build_from_model() -> void:
 		var is_front := wheel_name.begins_with("Wheel_F")
 		var wheel := VehicleWheel3D.new()
 		wheel.name = wheel_name
-		wheel.position = to_local(wheel_mesh.global_position)
 		var mesh_size := wheel_mesh.get_aabb().size
 		wheel.wheel_radius = maxf(mesh_size.y, mesh_size.z) * 0.5
-		wheel.wheel_rest_length = 0.12
-		wheel.suspension_travel = 0.18
-		wheel.suspension_stiffness = 48.0
-		wheel.suspension_max_force = float(data["mass"]) * 9.8
-		wheel.damping_compression = 1.4
-		wheel.damping_relaxation = 1.9
+		wheel.wheel_rest_length = 0.14
+		# Attach the suspension above the hub so the resting wheel sits where
+		# the model drew it (otherwise the car squats and wheels look sunken).
+		wheel.position = to_local(wheel_mesh.global_position) + Vector3.UP * 0.1
+		wheel.suspension_travel = 0.2
+		wheel.suspension_stiffness = 60.0
+		wheel.suspension_max_force = float(data["mass"]) * 14.0
+		wheel.damping_compression = 1.8
+		wheel.damping_relaxation = 2.4
 		wheel.wheel_friction_slip = data["grip"]
-		wheel.wheel_roll_influence = 0.25
+		wheel.wheel_roll_influence = 0.05   # low = the chassis won't be levered over
 		wheel.use_as_steering = is_front
 		var drive: String = data["drive"]
 		wheel.use_as_traction = drive == "awd" or (drive == "fwd") == is_front
@@ -302,7 +332,12 @@ func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool
 
 
 func _physics_process(delta: float) -> void:
+	_slow_timer = maxf(_slow_timer - delta, 0.0)
+	_stabilize(delta)
+	if driver == null and not ai_enabled:
+		return
 	if driver == null:
+		_drive(delta, ai_throttle, ai_reverse, ai_steer, ai_handbrake)
 		return
 	driver.global_position = global_position + Vector3.UP * 0.5
 
@@ -316,13 +351,48 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed(&"grenade"):
 		driver.use_vehicle_grenade()
 	driver.send_state_from_vehicle(delta)
-	_slow_timer = maxf(_slow_timer - delta, 0.0)
 
-	var throttle := Input.get_action_strength(&"move_forward")
-	var reverse := Input.get_action_strength(&"move_back")
-	var steer_input := Input.get_axis(&"move_right", &"move_left")
+	_drive(delta, Input.get_action_strength(&"move_forward"), Input.get_action_strength(&"move_back"),
+		Input.get_axis(&"move_right", &"move_left"), Input.is_action_pressed(&"jump"))
+	if is_police:
+		_siren_time += delta
+
+
+## Anti-roll: keeps cars planted in hard corners (and rights them if they flip).
+func _stabilize(delta: float) -> void:
+	if freeze or sleeping:
+		return
+	var up := global_basis.y
+	var forward := global_basis.z
+	var speed := linear_velocity.length()
+	# Counter roll angle and roll rate around the car's long axis.
+	var roll := asin(clampf(global_basis.x.dot(Vector3.UP), -1.0, 1.0))
+	var roll_rate := angular_velocity.dot(forward)
+	# Positive roll = rotated +angle about forward, so push back the other way.
+	apply_torque(-forward * (roll * 9.0 + roll_rate * 2.5) * mass)
+	# Pitch damping (no wheelies / nose-dives)
+	var pitch_rate := angular_velocity.dot(global_basis.x)
+	apply_torque(-global_basis.x * pitch_rate * 1.5 * mass)
+	# Downforce grows with speed
+	apply_central_force(-up * speed * speed * mass * 0.004)
+	# Upside down and stopped: flip back onto the wheels after a moment.
+	if up.dot(Vector3.UP) < 0.35 and speed < 3.0:
+		_upside_down_time += delta
+		if _upside_down_time > 1.5:
+			_upside_down_time = 0.0
+			var heading := Vector3(forward.x, 0.0, forward.z).normalized()
+			if heading.length() < 0.1:
+				heading = Vector3.FORWARD
+			global_transform = Transform3D(Basis.looking_at(-heading, Vector3.UP), global_position + Vector3.UP * 1.2)
+			linear_velocity = Vector3.ZERO
+			angular_velocity = Vector3.ZERO
+	else:
+		_upside_down_time = 0.0
+
+
+func _drive(delta: float, throttle: float, reverse: float, steer_input: float, handbrake: bool) -> void:
 	var speed := forward_speed()
-	var top_speed: float = data["top_speed"] * (0.55 if _slow_timer > 0.0 else 1.0)
+	var top_speed: float = data["top_speed"] * (0.55 if _slow_timer > 0.0 else 1.0) * ai_top_speed_scale
 	var accel: float = data["accel"] * (0.4 if _slow_timer > 0.0 else 1.0)
 	var decel: float = data["decel"]
 	var forward := global_basis.z
@@ -353,7 +423,6 @@ func _physics_process(delta: float) -> void:
 	# Air drag so cars settle at their top speed instead of creeping past it.
 	apply_central_force(-linear_velocity * mass * 0.015)
 
-	var handbrake := Input.is_action_pressed(&"jump")
 	var hold_brake: float = data["brake"]
 	for wheel in _wheels:
 		wheel.engine_force = 0.0
@@ -370,19 +439,16 @@ func _physics_process(delta: float) -> void:
 	_steer = move_toward(_steer, steer_input * max_steer, 2.4 * delta)
 	for wheel in _front_wheels:
 		wheel.steering = _steer
-
-	if is_police:
+	if ai_enabled and is_police:
 		_siren_time += delta
+		_flash_lights()
 
 
 func _process(delta: float) -> void:
 	if _camera == null:
 		return
 	if is_police and driver:
-		var phase := fmod(_siren_time * 3.0, 1.0)
-		for i in _light_bar.size():
-			var on := (phase < 0.5) == (i == 0)
-			(_light_bar[i].material_override as StandardMaterial3D).emission_energy_multiplier = 4.0 if on else 0.2
+		_flash_lights()
 
 	if GameSettings.camera_mode == GameSettings.FIRST_PERSON:
 		# Driver's seat: left side, eye height.
@@ -407,6 +473,23 @@ func _process(delta: float) -> void:
 func _set_light_bar(energy: float) -> void:
 	for lamp in _light_bar:
 		(lamp.material_override as StandardMaterial3D).emission_energy_multiplier = energy
+	if _lights_material:
+		_lights_material.albedo_color = Color(0.3, 0.3, 0.35)
+		_lights_material.emission = Color(0.3, 0.3, 0.35)
+		_lights_material.emission_energy_multiplier = energy
+
+
+func _flash_lights() -> void:
+	var phase := fmod(_siren_time * 3.0, 1.0)
+	for i in _light_bar.size():
+		var on := (phase < 0.5) == (i == 0)
+		(_light_bar[i].material_override as StandardMaterial3D).emission_energy_multiplier = 4.0 if on else 0.2
+	if _lights_material:
+		var red := phase < 0.5
+		var color := Color(1.0, 0.1, 0.08) if red else Color(0.1, 0.25, 1.0)
+		_lights_material.albedo_color = color
+		_lights_material.emission = color
+		_lights_material.emission_energy_multiplier = 5.0
 
 
 func _on_body_entered(body: Node) -> void:

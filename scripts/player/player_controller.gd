@@ -21,6 +21,7 @@ const WORLD_LAYER := 1
 const PLAYER_LAYER := 2
 const ENEMY_LAYER := 4
 const VEHICLE_LAYER := 32
+const CIVILIAN_LAYER := 16
 const LOOK_SCALE := 0.0045
 const INTERACT_RANGE := 3.4
 
@@ -91,6 +92,11 @@ var ammo := 0
 var reserve := 0
 var grenades := 0
 var aiming := false
+var blocking := false
+var weapon_name := ""
+var _pellets := 1
+var _auto := true
+var _air_time := 0.0
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _yaw := 0.0
@@ -157,10 +163,9 @@ func _ready() -> void:
 	rig.name = "Rig"
 	_model.add_child(rig)
 	rig.setup(GameSettings.character)
+	equip(GameSettings.equipped_weapon)
 
 	_build_camera()
-	ammo = mag_size
-	reserve = start_reserve
 	grenades = grenade_count
 	_camera_mode = GameSettings.camera_mode
 	GameSettings.camera_mode_changed.connect(_apply_camera_mode)
@@ -173,6 +178,26 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+
+
+## Load a gun's stats (WeaponCatalog) and model.
+func equip(id: String) -> void:
+	var data := WeaponCatalog.get_data(id)
+	weapon_name = data["name"]
+	rifle_damage = data["damage"]
+	fire_rate = data["rate"]
+	mag_size = data["mag"]
+	reload_time = data["reload"]
+	rifle_range = data["range"]
+	spread_deg = data["spread"]
+	aim_spread_deg = float(data["spread"]) * 0.25
+	_pellets = data["pellets"]
+	_auto = data["auto"]
+	ammo = mag_size
+	reserve = mag_size * 5
+	if rig:
+		rig.set_weapon(data["id"])
+	ammo_changed.emit(ammo, reserve)
 
 
 # ------------------------------------------------------------------ state
@@ -299,14 +324,17 @@ func _physics_process(delta: float) -> void:
 	if is_armed():
 		if Input.is_action_just_pressed(&"aim"):
 			aiming = not aiming
-		if Input.is_action_pressed(&"fire"):
+		var trigger := Input.is_action_pressed(&"fire") if _auto else Input.is_action_just_pressed(&"fire")
+		if trigger:
 			_try_fire()
 		if Input.is_action_just_pressed(&"reload"):
 			_start_reload()
 		if Input.is_action_just_pressed(&"grenade"):
 			_try_throw_grenade()
 	else:
-		_read_punch_input()
+		blocking = Input.is_action_pressed(&"block") and is_on_floor() and not _attacking
+		if not blocking:
+			_read_punch_input()
 	if Input.is_action_just_pressed(&"surge"):
 		_try_surge()
 
@@ -320,6 +348,8 @@ func _physics_process(delta: float) -> void:
 		target_speed = sprint_speed
 	if aiming:
 		target_speed = minf(target_speed, aim_speed)
+	if blocking:
+		target_speed = minf(target_speed, 1.2)
 	if _attacking or _throw_timer > 0.0:
 		target_speed *= 0.3
 	var target_velocity := move_dir.normalized() * target_speed if move_dir.length() > 0.01 else Vector3.ZERO
@@ -330,10 +360,18 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed(&"jump") and is_on_floor() and not _attacking:
 		velocity.y = jump_velocity
-		rig.play(&"jump", 1.0, 0.08)
-		_action_lock = 0.45
+		var sprinting := Vector3(velocity.x, 0, velocity.z).length() > run_speed + 0.5
+		if is_armed():
+			rig.replay(&"jump", 1.0, 0.08)
+		elif sprinting and rig.has_clip(&"jump_big"):
+			velocity.y = jump_velocity * 1.15
+			rig.replay(&"jump_big", rig.clip_length(&"jump_big") / 1.1, 0.08)
+		else:
+			rig.replay(&"jump_unarmed", rig.clip_length(&"jump_unarmed") / 0.9, 0.08)
+		_action_lock = 0.5
 
 	_update_punch(delta)
+	_air_time = 0.0 if is_on_floor() else _air_time + delta
 	move_and_slide()
 	_update_facing_and_anim(move_dir, delta)
 	if global_position.y < -40.0:
@@ -366,17 +404,24 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 		_model_yaw = lerp_angle(_model_yaw, atan2(-move_dir.x, -move_dir.z), clampf(turn_speed * delta, 0.0, 1.0))
 	_model.rotation.y = _model_yaw
 
-	if _action_lock > 0.0 or _attacking or _throw_timer > 0.0:
+	if _action_lock > 0.0 or _attacking or _throw_timer > 0.0 or health.is_dead:
+		return
+	if _air_time > 0.55 and velocity.y < -3.0:
+		rig.play(&"fall", 1.0, 0.2)
+		return
+	if blocking:
+		rig.play(&"block", 1.0, 0.1)
 		return
 	if _reload_timer > 0.0:
-		rig.play(&"reload", 3.3 / reload_time, 0.1)
+		rig.play(&"reload", rig.clip_length(&"reload") / reload_time, 0.1)
 		return
 	var facing := Basis(Vector3.UP, _model_yaw)
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
 	var local_forward := flat.dot(facing * Vector3.FORWARD)
 	var local_right := flat.dot(facing * Vector3.RIGHT)
-	if flat.length() < 0.3 and _fire_cooldown > 0.0:
-		return   # standing and shooting: let the fire clip play
+	if flat.length() < 0.3 and is_armed() and _fire_cooldown > 0.0:
+		rig.play(&"fire", 1.0, 0.08)   # steady firing loop while the trigger is held
+		return
 	rig.play_locomotion(local_right, local_forward)
 
 
@@ -397,28 +442,30 @@ func _try_fire() -> void:
 	var origin := cam.origin + direction * maxf((global_position - cam.origin).dot(direction), 0.0)
 	direction = _aim_assist(origin, direction)
 	var spread := deg_to_rad(aim_spread_deg if aiming else spread_deg)
-	direction = direction.rotated(cam.basis.x, randf_range(-spread, spread)).rotated(cam.basis.y, randf_range(-spread, spread))
-
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * rifle_range)
-	query.collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
-	query.exclude = [get_rid()]
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	var end := origin + direction * rifle_range
-	if not hit.is_empty():
-		end = hit["position"]
-		var target = hit["collider"]
-		if target and target.has_method(&"take_hit"):
-			target.take_hit(rifle_damage, direction * 1.5, self, false)
-			GameSettings.vibrate(8)
-		elif target is RigidBody3D:
-			(target as RigidBody3D).apply_impulse(direction * 3.0, end - (target as Node3D).global_position)
-		Effects.impact(get_tree(), end)
+	var aim_dir := direction
 	var muzzle := rig.muzzle_position()
+	var end := origin + direction * rifle_range
+	for pellet in _pellets:
+		direction = aim_dir.rotated(cam.basis.x, randf_range(-spread, spread)).rotated(cam.basis.y, randf_range(-spread, spread))
+		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * rifle_range)
+		query.collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER | CIVILIAN_LAYER
+		query.exclude = [get_rid()]
+		var hit := get_world_3d().direct_space_state.intersect_ray(query)
+		end = origin + direction * rifle_range
+		if not hit.is_empty():
+			end = hit["position"]
+			var target = hit["collider"]
+			if target and target.has_method(&"take_hit"):
+				target.take_hit(rifle_damage, direction * 1.5, self, false)
+				GameSettings.vibrate(8)
+			elif target is RigidBody3D:
+				(target as RigidBody3D).apply_impulse(direction * 3.0, end - (target as Node3D).global_position)
+			Effects.impact(get_tree(), end)
+		if pellet < 3:
+			Effects.tracer(get_tree(), muzzle, end)
 	Effects.muzzle_flash(get_tree(), muzzle)
-	Effects.tracer(get_tree(), muzzle, end)
-	if Vector3(velocity.x, 0.0, velocity.z).length() < 0.3:
-		rig.replay(&"fire")
-	_shake = maxf(_shake, 0.12)
+	rig.kick(1.6 if _pellets > 1 or rifle_damage > 60.0 else 1.0)
+	_shake = maxf(_shake, 0.12 + clampf(rifle_damage / 400.0, 0.0, 0.3))
 	_pitch = clampf(_pitch + deg_to_rad(0.35), deg_to_rad(min_pitch_deg), deg_to_rad(max_pitch_deg))   # recoil
 	if Session.mode == Session.MODE_STORY and _heat_timer <= 0.0:
 		WantedSystem.report_crime(WantedSystem.CRIME_GUNFIRE * 0.4, global_position, 3)
@@ -517,7 +564,7 @@ func _try_surge() -> void:
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = sphere
 	params.transform = Transform3D(Basis(), global_position + Vector3.UP)
-	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER
+	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER | CIVILIAN_LAYER
 	params.exclude = [get_rid()]
 	for hit: Dictionary in get_world_3d().direct_space_state.intersect_shape(params, 24):
 		var target = hit.get("collider")
@@ -561,9 +608,21 @@ func _start_punch(heavy: bool) -> void:
 		_attack_damage = light_damage[_combo_step - 1]
 		_attack_active_at = 0.12
 		_attack_duration = 0.34 if _combo_step < light_damage.size() else 0.5
+	var flying := heavy and Vector3(velocity.x, 0, velocity.z).length() > run_speed + 0.5 and rig.has_clip(&"flying_kick")
+	if heavy:
+		_attack_duration = 0.85
+		_attack_active_at = 0.42
+	else:
+		_attack_duration = 0.5 if _combo_step < light_damage.size() else 0.62
+		_attack_active_at = _attack_duration * 0.45
+	if flying:
+		_attack_duration = 0.9
+		_attack_active_at = 0.45
+		_attack_damage = heavy_damage * 1.4
+		velocity += Basis(Vector3.UP, _model_yaw) * Vector3.FORWARD * 6.0
 	_face_nearest_enemy()
-	var clip := &"punch_heavy" if heavy else StringName("punch_%d" % _combo_step)
-	if not rig.play(clip, 1.0, 0.05):
+	var clip := &"flying_kick" if flying else (&"punch_heavy" if heavy else StringName("punch_%d" % _combo_step))
+	if not rig.replay(clip, rig.clip_length(clip) / _attack_duration, 0.06):
 		# No punch clips yet: a body lunge so hits still read.
 		var lunge := Vector3(0.0, 0.0, -0.35 if heavy else -0.2).rotated(Vector3.UP, _model_yaw)
 		var tween := create_tween()
@@ -595,7 +654,7 @@ func _perform_punch() -> void:
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = shape
 	params.transform = Transform3D(Basis(), global_position + Vector3.UP * 1.1 + forward * punch_reach)
-	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER
+	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | CIVILIAN_LAYER
 	params.exclude = [get_rid()]
 	var landed := false
 	for hit: Dictionary in get_world_3d().direct_space_state.intersect_shape(params, 8):
@@ -650,15 +709,19 @@ func _face_nearest_enemy() -> void:
 func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool = false) -> void:
 	if health.is_dead or current_vehicle:
 		return
+	if blocking:
+		damage *= 0.25
+		knockback *= 0.3
+		heavy = false
 	health.take_damage(damage, attacker)
 	velocity += knockback
 	_shake = 0.4
 	GameSettings.vibrate(40)
 	if heavy:
 		_attacking = false
-	if not _attacking and _action_lock <= 0.0:
-		rig.play(&"hit", 1.0, 0.05)
-		_action_lock = 0.3
+	if not _attacking and _action_lock <= 0.0 and not blocking:
+		rig.replay(&"hit" if is_armed() else &"hit_unarmed", 1.6, 0.05)
+		_action_lock = 0.35
 
 
 func _on_net_damage(amount: float, from_peer: int, knockback: Vector3) -> void:
@@ -679,7 +742,8 @@ func _on_died() -> void:
 		current_vehicle.exit()
 	_attacking = false
 	aiming = false
-	create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
+	if not rig.replay(&"death", 1.3, 0.1):
+		create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
 	knocked_out.emit()
 	if Session.mode != Session.MODE_STORY:
 		# Works offline too (solo practice): Net emits locally when not connected.
@@ -695,6 +759,7 @@ func _respawn() -> void:
 	global_position = spawn_point
 	velocity = Vector3.ZERO
 	_model.rotation.x = 0.0
+	rig.play(&"idle" if is_armed() else &"idle_unarmed", 1.0, 0.0)
 	health.revive()
 	ammo = mag_size
 	reserve = maxi(reserve, start_reserve / 2)
@@ -778,7 +843,7 @@ func _send_network_state(delta: float) -> void:
 	var state := {
 		"p": global_position, "y": _model_yaw, "c": rig.current_clip(),
 		"s": rig.anim.speed_scale if rig.anim else 1.0, "a": is_armed(), "h": health.current,
-		"ch": GameSettings.character, "alive": is_alive(),
+		"ch": GameSettings.character, "alive": is_alive(), "w": rig.weapon_id,
 	}
 	if current_vehicle:
 		state["v"] = current_vehicle.vehicle_id

@@ -50,3 +50,18 @@ func names_for(ids: Array) -> String:
 	for id in ids:
 		out.append(str((Net.players.get(id, {}) as Dictionary).get("name", "Player %d" % id)))
 	return ", ".join(out)
+
+
+## Solo practice: AI opponents so multiplayer modes work offline.
+static func make_bot(world: World, index: int, team: String, weapon: String, pos: Vector3) -> BotSoldier:
+	var names := ["Ace", "Blaze", "Cruz", "Dex", "Echo", "Fox", "Gage", "Hex", "Iggy", "Jinx", "Knox", "Lux"]
+	var palette := [Color(0.3, 0.35, 0.25), Color(0.4, 0.2, 0.15), Color(0.2, 0.25, 0.35), Color(0.45, 0.42, 0.35), Color(0.15, 0.15, 0.17)]
+	var bot := BotSoldier.new()
+	bot.bot_id = -(index + 1)
+	bot.team = team
+	bot.display_name = names[index % names.size()]
+	bot.weapon_id = weapon
+	bot.tint_colors = [Color(0.55, 0.4, 0.3), palette[index % palette.size()]]
+	bot.position = pos + Vector3.UP * 0.4
+	world.add_child(bot)
+	return bot

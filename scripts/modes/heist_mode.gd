@@ -41,11 +41,34 @@ func begin() -> void:
 	Net.player_eliminated.connect(_on_eliminated)
 	Net.match_event.connect(_on_event)
 	_build_zone()
+	if not Session.networked:
+		_spawn_solo_police()
 	hud().show_banner("ROBBERS VS POLICE", 2.5)
 	if _team == "robbers":
 		hud().show_hint("You're a ROBBER. Get to the extraction point at the %s!" % _extract_region)
 	else:
 		hud().show_hint("You're POLICE. Stop the robbers before they reach the %s." % _extract_region)
+
+
+## Solo practice: officers on foot from the precinct plus Crown Vic pursuit.
+func _spawn_solo_police() -> void:
+	for i in 4:
+		var officer := GameMode.make_bot(world, i, "police", "glock17" if i < 2 else "m4a1",
+			world.precinct_position + Vector3(-6.0 + i * 4.0, 0.0, -3.0))
+		officer.display_name = "Police"
+		officer.tint_colors = [Color(0.55, 0.42, 0.33), Color(0.07, 0.1, 0.22)]
+		officer.rig.tint(officer.tint_colors)
+		officer.accuracy = 0.55
+		officer.sight_range = 90.0
+		officer.has_objective = true
+		officer.objective = world.bank_position
+		officer.add_to_group(&"police")
+	var pursuit := PoliceManager.new()
+	pursuit.name = "Pursuit"
+	pursuit.world = world
+	pursuit.forced_stars = 3
+	add_child(pursuit)
+	pursuit.busted.connect(func() -> void: _resolve(false))
 
 
 func _build_zone() -> void:

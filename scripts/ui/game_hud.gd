@@ -21,6 +21,8 @@ var _pause_panel: PanelContainer
 var _settings: SettingsPanel
 var _results: PanelContainer
 var _banner_tween: Tween
+var _clock: Label
+var _bust: ProgressBar
 var _hint_tween: Tween
 
 
@@ -44,6 +46,20 @@ func _ready() -> void:
 	_health_bar.add_theme_stylebox_override("background", _flat_box(Color(0, 0, 0, 0.5)))
 	_health_bar.add_theme_stylebox_override("fill", _flat_box(Color(0.93, 0.91, 0.86)))
 	_root.add_child(_health_bar)
+
+	_clock = _label(22, HORIZONTAL_ALIGNMENT_LEFT)
+	_clock.position = Vector2(28, 304)
+	_clock.size = Vector2(240, 30)
+	_root.add_child(_clock)
+
+	_bust = ProgressBar.new()
+	_bust.show_percentage = false
+	_place(_bust, Control.PRESET_CENTER, -220, 70, 220, 92)
+	_bust.add_theme_stylebox_override("background", _flat_box(Color(0, 0, 0, 0.5)))
+	_bust.add_theme_stylebox_override("fill", _flat_box(Color(0.25, 0.45, 1.0)))
+	_bust.max_value = 1.0
+	_bust.visible = false
+	_root.add_child(_bust)
 
 	_wanted = WantedStars.new()
 	_place(_wanted, Control.PRESET_TOP_RIGHT, -420, 18, -120, 74)
@@ -116,6 +132,15 @@ func _process(_delta: float) -> void:
 		return
 	if _player.current_vehicle:
 		_speed.text = "%d km/h" % roundi(absf(_player.current_vehicle.forward_speed()) * 3.6)
+	if _world and _world.day_night:
+		_clock.text = _world.day_night.clock_text()
+	if _world and _world.police:
+		var progress := _world.police.busting_progress()
+		_bust.visible = progress > 0.05
+		_bust.value = progress
+		if _bust.visible:
+			_hint.text = "BUSTED…  get moving!"
+			_hint.modulate.a = 1.0
 	_crosshair.visible = _player.is_armed() and _player.current_vehicle == null and _player.is_alive()
 	_crosshair.queue_redraw()
 	if _player.is_armed():

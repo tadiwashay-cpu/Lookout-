@@ -69,6 +69,9 @@ func apply_state(state: Dictionary) -> void:
 	_target_yaw = state.get("y", _target_yaw)
 	_alive = state.get("alive", true)
 	_rig.armed = state.get("a", true)
+	var weapon := str(state.get("w", ""))
+	if weapon != "" and weapon != _rig.weapon_id:
+		_rig.set_weapon(weapon)
 	var clip: StringName = StringName(str(state.get("c", "idle")))
 	_rig.play(clip, float(state.get("s", 1.0)))
 	var car_id := str(state.get("v", ""))
@@ -79,7 +82,6 @@ func apply_state(state: Dictionary) -> void:
 		_car_target_pos = state.get("vp", _target_pos)
 		_car_target_rot = state.get("vq", Quaternion.IDENTITY)
 	_rig.visible = not _in_vehicle
-	rotation.x = 0.0 if _alive else -PI * 0.5
 
 
 func _physics_process(delta: float) -> void:

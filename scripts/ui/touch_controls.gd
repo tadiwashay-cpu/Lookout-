@@ -113,6 +113,7 @@ func _layout() -> void:
 		_add(&"punch_heavy", "HEAVY", br + Vector2(-410, -130) * k, 78.0)
 		_add(&"jump", "JUMP", br + Vector2(-160, -420) * k, 70.0)
 		_add(&"surge", "SURGE", br + Vector2(-380, -340) * k, 66.0)
+		_add(&"block", "BLOCK", br + Vector2(-610, -150) * k, 62.0)
 		if player and player.weapons_allowed:
 			_add(&"swap_weapon", "RIFLE", br + Vector2(-110, -620) * k, 50.0)
 	_add(&"toggle_camera", "CAM", Vector2(s.x - 190, 190), 46.0)

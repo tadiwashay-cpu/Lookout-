@@ -18,6 +18,9 @@ var _car: DrivableCar
 var _rings: Array[MeshInstance3D] = []
 var _results: Array = []          # [{"name", "time"}]
 var _finish_deadline := -1.0
+var _bots: Array[DrivableCar] = []
+var _bot_done: Dictionary = {}
+const BOT_RACERS := 3
 
 
 func begin() -> void:
@@ -40,6 +43,8 @@ func begin() -> void:
 	player().grenade_cooldown = 3.0
 	_build_rings()
 	Net.match_event.connect(_on_event)
+	if not Session.networked:
+		_spawn_bot_racers(start, forward, right)
 	_countdown()
 
 
@@ -64,6 +69,28 @@ func _build_route() -> void:
 		_checkpoints.append(path[path.size() - 1])
 	for i in _checkpoints.size():
 		_checkpoints[i].y = world.ground_height(_checkpoints[i].x, _checkpoints[i].z) + 0.4
+
+
+func _spawn_bot_racers(start: Vector3, forward: Vector3, right: Vector3) -> void:
+	var rng := Session.match_rng(21)
+	var route: Array[Vector3] = []
+	for i in range(1, _checkpoints.size()):
+		route.append(_checkpoints[i])
+	for i in BOT_RACERS:
+		var slot := i + 1
+		var pos := start - forward * (8.0 + (slot / 2) * 9.0) + right * (3.5 if slot % 2 == 0 else -3.5)
+		pos.y = world.ground_height(pos.x, pos.z) + 0.6
+		var car := world.spawn_car(RACE_CAR, pos, atan2(forward.x, forward.z), Color.from_hsv(fmod(slot * 0.17, 1.0), 0.55, 0.55))
+		car.has_been_stolen = true
+		car.freeze = true
+		car.set_meta(&"racer_name", ["Ace", "Blaze", "Cruz"][i])
+		var pilot := CarPilot.new()
+		pilot.name = "Pilot"
+		pilot.route = route
+		pilot.skill = rng.randf_range(0.85, 1.05)
+		pilot.aggression = 1.3
+		car.add_child(pilot)
+		_bots.append(car)
 
 
 func _build_rings() -> void:
@@ -100,6 +127,8 @@ func _countdown() -> void:
 		await get_tree().create_timer(1.0).timeout
 	hud().show_banner("GO!", 0.8, 120)
 	_car.freeze = false
+	for bot in _bots:
+		bot.freeze = false
 	_started = true
 
 
@@ -107,6 +136,14 @@ func _process(delta: float) -> void:
 	if not _started or finished:
 		return
 	_time += delta
+	for i in _bots.size():
+		var bot := _bots[i]
+		if _bot_done.has(i) or not is_instance_valid(bot):
+			continue
+		var pilot := bot.get_node_or_null("Pilot") as CarPilot
+		if pilot and pilot.route_index >= pilot.route.size() - 1 and bot.global_position.distance_to(pilot.route[pilot.route.size() - 1]) < CHECKPOINT_RADIUS + 4.0:
+			_bot_done[i] = true
+			_on_event("race_finish", {"name": str(bot.get_meta(&"racer_name")), "time": _time, "sender": -(i + 1)})
 	if _next < _rings.size():
 		var target := _checkpoints[_next + 1]
 		if _car.global_position.distance_to(target) < CHECKPOINT_RADIUS + 3.0:
@@ -127,7 +164,7 @@ func _on_event(kind: String, data: Dictionary) -> void:
 	_results.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["time"] < b["time"])
 	if _finish_deadline < 0.0:
 		_finish_deadline = _time + 45.0
-	var expected := Net.players.size() if Session.networked else 1
+	var expected := Net.players.size() if Session.networked else 1 + _bots.size()
 	if _results.size() >= expected:
 		_finish()
 

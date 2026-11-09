@@ -16,12 +16,15 @@ signal damage_received(amount: float, from_peer: int, knockback: Vector3)
 signal slow_received(seconds: float)
 signal player_eliminated(peer_id: int, by_peer: int)
 signal match_event(kind: String, data: Dictionary)
+signal lobby_mode_changed(mode: int)
 
 const PORT := 7777
 const MAX_PLAYERS := 12
 
 ## peer_id -> {"name": String, "character": String}
 var players: Dictionary = {}
+## The mode the host picked (shown to everyone in the lobby).
+var lobby_mode: int = 1
 
 
 func _ready() -> void:
@@ -116,6 +119,7 @@ func _register(info: Dictionary) -> void:
 		"character": info.get("character", "x_bot"),
 	}
 	_sync_players.rpc(players)
+	_sync_mode.rpc(lobby_mode)
 	players_changed.emit()
 
 
@@ -123,6 +127,20 @@ func _register(info: Dictionary) -> void:
 func _sync_players(list: Dictionary) -> void:
 	players = list
 	players_changed.emit()
+
+
+## Host only.
+func set_lobby_mode(mode: int) -> void:
+	lobby_mode = mode
+	lobby_mode_changed.emit(mode)
+	if is_active() and multiplayer.is_server():
+		_sync_mode.rpc(mode)
+
+
+@rpc("authority", "reliable")
+func _sync_mode(mode: int) -> void:
+	lobby_mode = mode
+	lobby_mode_changed.emit(mode)
 
 
 ## Host only: pick a seed and (for the heist) split teams, then start everyone.

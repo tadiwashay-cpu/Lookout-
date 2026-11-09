@@ -34,12 +34,13 @@ const VEHICLES := {
 	"sport": {"model": "sport", "rank": "S", "mass": 1250.0, "drive": "rwd"},
 	# Police: interceptor sedan and utility SUV. Parked at the precinct —
 	# you can take them, but it's a serious crime.
-	"police_sedan": {"model": "sedan", "rank": "A", "mass": 1500.0, "drive": "rwd", "police": true},
+	"police_sedan": {"model": "crown_vic", "rank": "A", "mass": 1800.0, "drive": "rwd", "police": true,
+		# The Crown Vic has no base-colour texture: colour its materials here.
+		"colors": {"body": Color(0.92, 0.92, 0.93), "wheel": Color(0.06, 0.06, 0.065), "brake": Color(0.3, 0.3, 0.3), "interior": Color(0.08, 0.08, 0.09)}},
 	"police_suv": {"model": "suv", "rank": "B", "mass": 2200.0, "drive": "awd", "police": true},
 }
 
 const POLICE_PAINT := {
-	"police_sedan": Color(0.05, 0.08, 0.16),   # deep navy
 	"police_suv": Color(0.04, 0.04, 0.05),     # black
 }
 

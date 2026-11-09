@@ -129,6 +129,47 @@ the game.** Players learn them by driving.
   damage, traffic.
 - Tuning lives in `scripts/vehicles/vehicle_catalog.gd`.
 
+## 6c. Police pursuit (NFS: Most Wanted style)
+- Heat 1★ to 5★ means 1 to 6 Crown Vic interceptors. Black SUVs join at 4★ and up.
+- Units are slightly faster than your car. They lead your path, ram your
+  rear quarter, and box you in (left and right slots). If you outrun them
+  out of sight, they're re-dispatched onto a road behind you.
+- 3★ and up: roadblocks (two cruisers across the road about 150 m ahead).
+- On foot: cars pull up and two officers get out. They tackle at 1★,
+  carry pistols at 2★, and carry rifles at 3★ and up.
+- **Busted**: crawling (under 2.5 m/s) with a cruiser within 9 m for 3 s.
+  You get a fine (10% of your money, up to $500) and respawn at the
+  precinct.
+- **Evade**: break line of sight. Heat decays once no unit has seen you
+  for a few seconds.
+- Code: `scripts/ai/police_manager.gd`, `scripts/ai/car_pilot.gd`.
+
+## 6d. NPCs and bots
+- Pedestrians (Low Poly Man, random outfits): up to 12 around you in the
+  city and suburb. They flee from crimes and gunfire. Hurting them raises
+  heat.
+- Goons: the Low Tide crew in red jackets, with punch, hit and death
+  animations.
+- Solo practice bots:
+  - Battle Royale: 9 armed bots that follow the zone and fight everyone.
+  - Street Race: 3 AI racers.
+  - Robbers vs Police: officers on foot plus a pursuit.
+
+## 6e. Guns and the shop
+13 guns with distinct stats (`scripts/weapons/weapon_catalog.gd`): the
+M4A1 (starter), plus AK-47, M16A4, G36, SCAR-H, MP5K, Uzi, P90, Glock,
+Deagle, SPAS-12 (8 pellets), AWP and M249. Buy and equip them in
+**Main menu → SHOP** with money from missions and multiplayer.
+
+## 6f. Atmosphere
+- Day and night cycle (Settings: minutes per day). At night: moon, lit
+  windows, glowing street lamps, orange dusk.
+- Cloud layer over the map, and billowing clouds plus valley mist over
+  the forest.
+- About 330 rocks: cover clusters in the forest, highway shoulders,
+  suburb, park and harbour.
+- Light motion blur (Settings; off on Low).
+
 ## 7. Factions
 - **Low Tide crew**: street gang terrorising the market. Red bandanas.
   Melee early, firearms later.

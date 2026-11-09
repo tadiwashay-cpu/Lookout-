@@ -103,7 +103,7 @@ func _physics_process(delta: float) -> void:
 		State.KNOCKDOWN:
 			_brake(delta, 6.0)
 			if _state_time >= 1.3:
-				create_tween().tween_property(_model, "rotation:x", 0.0, 0.25)
+				_rig().play(&"idle_unarmed", 1.0, 0.3)
 				_set_state(State.CHASE)
 		State.DEAD:
 			_brake(delta, 6.0)
@@ -157,6 +157,9 @@ func _tick_windup(delta: float) -> void:
 		_face(_player.global_position - global_position, delta)
 	var pulse := 0.5 + 0.5 * sin(_state_time * 30.0)
 	_body_material.emission = Color(0.9, 0.25, 0.1) * pulse
+	if _state_time < delta * 1.5:
+		# Telegraph: the wind-up of the punch is visible before it lands.
+		_rig().replay(&"punch_1", _rig().clip_length(&"punch_1") / (windup_time + 0.4), 0.08)
 	if _state_time < windup_time:
 		return
 	_body_material.emission = Color.BLACK
@@ -189,7 +192,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 		return
 	if heavy:
 		_set_state(State.KNOCKDOWN)
-		create_tween().tween_property(_model, "rotation:x", -PI * 0.45, 0.2)
+		_rig().replay(&"death", 2.5, 0.05)
 	else:
 		_set_state(State.STAGGER)
 
@@ -200,8 +203,7 @@ func _on_died() -> void:
 	remove_from_group(&"enemies")
 	collision_layer = 0
 	collision_mask = WORLD_LAYER
-	create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.35) \
-		.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	_rig().replay(&"death", 1.3, 0.05)
 	defeated.emit(self)
 	await get_tree().create_timer(8.0).timeout
 	queue_free()
@@ -273,51 +275,19 @@ func _flash_hit() -> void:
 	tween.tween_property(_body_material, "emission", Color.BLACK, 0.12)
 
 
+## Low-poly NPC man in Low Tide colours (red jacket), unarmed clip set.
 func _build_placeholder_body() -> void:
-	_model = Node3D.new()
-	_model.name = "Model"
-	add_child(_model)
-
-	var jackets := [Color(0.16, 0.18, 0.14), Color(0.13, 0.13, 0.14), Color(0.27, 0.12, 0.1), Color(0.12, 0.15, 0.22)]
+	_body_material = StandardMaterial3D.new()   # kept for the old flash calls (unused visually)
+	var rig := CharacterRig.new()
+	rig.name = "Model"
+	rig.armed = false
+	add_child(rig)
+	rig.setup("npc", _rng.randf_range(1.72, 1.9))
 	var skins := [Color(0.42, 0.26, 0.17), Color(0.62, 0.45, 0.33), Color(0.28, 0.17, 0.11), Color(0.75, 0.58, 0.46)]
-
-	_body_material = StandardMaterial3D.new()
-	_body_material.albedo_color = jackets[_rng.randi() % jackets.size()]
-	_body_material.roughness = 0.85
-	_body_material.emission_enabled = true
-	_body_material.emission = Color.BLACK
-	var jeans := StandardMaterial3D.new()
-	jeans.albedo_color = Color(0.2, 0.24, 0.3)
-	jeans.roughness = 0.9
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = skins[_rng.randi() % skins.size()]
-	skin.roughness = 0.7
-	var bandana := StandardMaterial3D.new()
-	bandana.albedo_color = Color(0.55, 0.12, 0.08)   # Low Tide crew colour
-	bandana.roughness = 0.8
-
-	_add_box(Vector3(0.5, 0.6, 0.3), Vector3(0, 1.28, 0), _body_material)
-	for side: float in [-1.0, 1.0]:
-		_add_box(Vector3(0.17, 0.85, 0.2), Vector3(0.12 * side, 0.45, 0), jeans)
-		_add_box(Vector3(0.14, 0.55, 0.14), Vector3(0.34 * side, 1.25, 0), _body_material)
-		_add_box(Vector3(0.12, 0.12, 0.12), Vector3(0.34 * side, 0.95, 0), skin)
-	var head := MeshInstance3D.new()
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.16
-	head_mesh.height = 0.34
-	head.mesh = head_mesh
-	head.material_override = skin
-	head.position = Vector3(0, 1.76, 0)
-	_model.add_child(head)
-	_add_box(Vector3(0.34, 0.08, 0.34), Vector3(0, 1.64, 0), bandana)
+	var jackets := [Color(0.5, 0.1, 0.08), Color(0.42, 0.08, 0.06), Color(0.58, 0.14, 0.1)]
+	rig.tint([skins[_rng.randi() % skins.size()], jackets[_rng.randi() % jackets.size()]])
+	_model = rig
 
 
-func _add_box(size: Vector3, pos: Vector3, material: Material) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = material
-	instance.position = pos
-	_model.add_child(instance)
-	return instance
+func _rig() -> CharacterRig:
+	return _model as CharacterRig
