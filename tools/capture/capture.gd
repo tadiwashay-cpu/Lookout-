@@ -53,6 +53,10 @@ func _ready() -> void:
 			ped = n
 	if ped:
 		await _shot(cam, ped.global_position + Vector3(2.0, 0.6, 2.0), ped.global_position + Vector3.UP * 0.6, "pedestrian")
+	# 5b. Bird's-eye over the city and landmark positions.
+	print("LANDMARKS hq=", world.hq_spawn, " bank=", world.bank_position, " precinct=", world.precinct_position, " lots=", world.imported_city.lots.size() if world.imported_city else -1)
+	await _shot(cam, Vector3(0, 230, 190), Vector3(0, 0, 10), "city_air")
+	await _shot(cam, world.bank_position + Vector3(14, 7, 16), world.bank_position + Vector3.UP * 3.0, "bank")
 	# 5. Wide street view (overall look).
 	await _shot(cam, p.global_position + Vector3(0, 6, 14), p.global_position + Vector3(0, 1, -10), "street")
 	# 6. Night drive: close chase + hood views from the real car cameras.

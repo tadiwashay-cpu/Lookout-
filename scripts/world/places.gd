@@ -124,6 +124,8 @@ static func _teller(player: PlayerController) -> void:
 static func _pawn_shop(world: World) -> void:
 	var c := WorldCity.block_center(2, 1)
 	var front := c + Vector3(-WorldCity.BLOCK_W * 0.25, 0.12, WorldCity.BLOCK_D * 0.5 - 1.2)
+	if world.imported_city:
+		front = world.imported_city.pawn + Vector3.UP * 0.1
 	var shop := Node3D.new()
 	shop.name = "PawnShop"
 	world.add_child(shop)

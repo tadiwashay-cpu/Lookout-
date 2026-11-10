@@ -15,7 +15,7 @@ func begin() -> void:
 	var p := player()
 	p.spawn_point = world.hq_spawn + Vector3.UP * 0.3
 	p.weapons_allowed = false
-	_market = WorldCity.block_center(3, 2)
+	_market = world.imported_city.market if world.imported_city else WorldCity.block_center(3, 2)
 	_challenge = CleanHandsChallenge.new()
 	_challenge.name = "CleanHands"
 	add_child(_challenge)
@@ -29,6 +29,8 @@ func begin() -> void:
 		var ix := squad_rng.randi_range(1, WorldCity.BLOCKS_X - 1)
 		var iz := squad_rng.randi_range(0, WorldCity.BLOCKS_Z - 2)
 		var spot := Vector3(WorldCity.street_x(ix), 0.3, WorldCity.street_z(iz) + 20.0)
+		if world.imported_city:
+			spot = world.imported_city.spot_away_from(world.hq_spawn, 60.0, squad_rng) + Vector3.UP * 0.3
 		if spot.distance_to(world.hq_spawn) < 60.0:
 			continue
 		for i in GOONS_PER_SQUAD:

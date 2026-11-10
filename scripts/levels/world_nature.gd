@@ -102,7 +102,7 @@ func _scatter_rocks() -> void:
 			add_rock(p, Vector3(s * 1.3, s, s), rng.randf() * TAU)
 	# Park and harbour edge
 	var park := WorldCity.block_center(WorldCity.PARK_BLOCK.x, WorldCity.PARK_BLOCK.y)
-	for i in 8:
+	for i in (0 if w.imported_city else 8):
 		var s := rng.randf_range(0.8, 1.4)
 		add_rock(park + Vector3(rng.randf_range(-30, 30), 0.1, rng.randf_range(-18, 18)), Vector3(s * 1.4, s, s * 1.2), rng.randf() * TAU)
 	for i in 10:

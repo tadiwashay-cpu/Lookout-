@@ -15,9 +15,9 @@ from mathutils import Matrix, Vector
 
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
 src, out_dir = args[0], args[1]
-SCALE = float(args[args.index("--scale") + 1]) if "--scale" in args else 6.0
+SCALE = float(args[args.index("--scale") + 1]) if "--scale" in args else 7.0
 CELL = float(args[args.index("--cell") + 1]) if "--cell" in args else 90.0
-KEEP = float(args[args.index("--keep") + 1]) if "--keep" in args else 0.33
+KEEP = float(args[args.index("--keep") + 1]) if "--keep" in args else 0.22
 os.makedirs(out_dir, exist_ok=True)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -27,8 +27,18 @@ for o in list(bpy.data.objects):
         bpy.data.objects.remove(o, do_unlink=True)
 
 def wbounds(o):
-    pts = [o.matrix_world @ Vector(c) for c in o.bound_box]
-    return Vector(map(min, *pts)), Vector(map(max, *pts))
+    # From the vertices themselves: bound_box is cached and goes stale after
+    # mesh.transform() in background mode.
+    import numpy as np
+    n = len(o.data.vertices)
+    if n == 0:
+        return Vector((0, 0, 0)), Vector((0, 0, 0))
+    co = np.empty(n * 3, dtype=np.float32)
+    o.data.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    mw = np.array(o.matrix_world, dtype=np.float32)
+    w = co @ mw[:3, :3].T + mw[:3, 3]
+    return Vector(w.min(axis=0).tolist()), Vector(w.max(axis=0).tolist())
 
 # ---- drop clutter: 3D text signs and specks ---------------------------------
 for o in list(bpy.data.objects):
@@ -65,6 +75,21 @@ def palette_mat(color):
         palette[key] = m
     return palette[key]
 
+# Trees: their gradient texture is missing. Objects made only of textured
+# materials (not furniture) are trees -> brown trunk below, green above.
+def is_textured(m):
+    if m is None or not m.use_nodes:
+        return False
+    b0 = next((n for n in m.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+    return bool(b0 and b0.inputs["Base Color"].links)
+
+TREES = set()
+for o in bpy.data.objects:
+    mats = [sl.material for sl in o.material_slots if sl.material]
+    if mats and all(is_textured(m) for m in mats) and not any(k in m.name.lower() for m in mats for k in ("chair", "wood")):
+        TREES.add(o.name)
+print("@trees", len(TREES))
+
 for o in bpy.data.objects:
     for i, slot in enumerate(o.material_slots):
         slot.material = palette_mat(base_color(slot.material))
@@ -95,6 +120,10 @@ M = Matrix.Scale(SCALE, 4) @ Matrix.Translation(Vector((-centre.x, -centre.y, -s
 for o in bpy.data.objects:
     o.data.transform(M)
     o.data.update()
+# Lift the grass slab to just under the roads: the game's flat ground
+# (y = 0) then fits roads, pavements and grass alike.
+gtop = max(v.co.z for v in ground.data.vertices)
+ground.data.transform(Matrix.Translation(Vector((0, 0, -0.03 - gtop))))
 
 def to_godot(v):   # Blender Z-up -> Godot Y-up (glTF): (x, y, z) -> (x, z, -y)
     return [round(v.x, 2), round(v.z, 2), round(-v.y, 2)]
@@ -141,7 +170,7 @@ for o in bpy.data.objects:
     size = mx - mn
     col = base_color(o.material_slots[0].material) if o.material_slots else (0.5, 0.5, 0.5)
     flat = size.z < 0.25
-    if flat and min(size.x, size.y) < 0.5 and max(size.x, size.y) > 4.0 and min(col) > 0.9:
+    if flat and min(size.x, size.y) < 0.6 and max(size.x, size.y) > 0.8 and min(col) > 0.9:
         # lane marking -> road centreline along its long axis
         if size.x >= size.y:
             a, b = Vector((mn.x, (mn.y + mx.y) / 2, 0)), Vector((mx.x, (mn.y + mx.y) / 2, 0))
@@ -161,21 +190,28 @@ for o in bpy.data.objects:
             if ps.x > 6 and ps.y > 6:
                 towers.append({"pos": [g[0], 0.0, g[2]], "height": round(pmx.z, 1), "size": [round(ps.x, 1), round(ps.y, 1)]})
 towers.sort(key=lambda t: -t["height"])
+if "--data-only" in args:   # refresh the JSON without redoing the heavy mesh work
+    path = os.path.join(out_dir, "city_data.json")
+    data = json.load(open(path))
+    data.update({"colliders": colliders, "roads": roads, "towers": towers[:12]})
+    json.dump(data, open(path, "w"))
+    print("@data-only colliders", len(colliders), "roads", len(roads))
+    os._exit(0)
 
 # ---- reduce heavy meshes --------------------------------------------------------
 before = sum(len(p.vertices) - 2 for o in bpy.data.objects for p in o.data.polygons)
 for o in bpy.data.objects:
     tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
-    if tris > 600:
+    if tris > 300:
         bpy.context.view_layer.objects.active = o
         mod = o.modifiers.new("planar", 'DECIMATE')
         mod.decimate_type = 'DISSOLVE'
         mod.angle_limit = math.radians(2.0)
         bpy.ops.object.modifier_apply(modifier=mod.name)
         tris = sum(len(p.vertices) - 2 for p in o.data.polygons)
-        if tris > 1500:
+        if tris > 500:
             mod = o.modifiers.new("collapse", 'DECIMATE')
-            mod.ratio = max(KEEP, 1500.0 / tris) if tris < 6000 else KEEP
+            mod.ratio = max(KEEP, 500.0 / tris) if tris < 2500 else KEEP
             bpy.ops.object.modifier_apply(modifier=mod.name)
 after = sum(len(p.vertices) - 2 for o in bpy.data.objects for p in o.data.polygons)
 
@@ -191,9 +227,16 @@ nt.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.85
 for o in bpy.data.objects:
     me = o.data
     cols = [tuple(base_color(slot.material)) for slot in o.material_slots] or [(0.6, 0.6, 0.6)]
+    for old in list(me.color_attributes):   # leftover colours from the source would win
+        me.color_attributes.remove(old)
     layer = me.color_attributes.new("Col", 'BYTE_COLOR', 'CORNER')
+    me.color_attributes.active_color = layer
+    me.color_attributes.render_color_index = 0
+    is_tree = o.name in TREES
     for poly in me.polygons:
         c = cols[min(poly.material_index, len(cols) - 1)]
+        if is_tree:   # low faces = trunk, the rest = foliage (two greens for variety)
+            c = (0.2, 0.13, 0.07) if poly.center.z < 0.9 else ((0.13, 0.3, 0.12) if (poly.index % 3) else (0.17, 0.36, 0.14))
         for li in poly.loop_indices:
             layer.data[li].color = (*c, 1.0)
     me.materials.clear()
@@ -209,32 +252,7 @@ for o in bpy.data.objects:
     cells[(math.floor(c.x / CELL), math.floor(c.y / CELL))].append(o)
 root = bpy.data.objects.new("City", None)
 bpy.context.collection.objects.link(root)
-# Walk/drive surface: the ground slab plus every big flat piece (roads,
-# pavements, bridges decks), as one collision-only mesh. Godot turns a node
-# named "*-colonly" into a StaticBody3D with a trimesh shape.
-col_bm = bmesh.new()
-for o in bpy.data.objects:
-    if o.type != 'MESH':
-        continue
-    mn, mx = wbounds(o)
-    sz = mx - mn
-    if o is ground or (sz.z < 0.35 * SCALE / 6.0 and sz.x * sz.y > 12.0 and mx.z < 3.0):
-        tmp = bmesh.new()
-        tmp.from_mesh(o.data)
-        tmp_mesh = bpy.data.meshes.new("t")
-        tmp.to_mesh(tmp_mesh)
-        tmp.free()
-        col_bm.from_mesh(tmp_mesh)
-        bpy.data.meshes.remove(tmp_mesh)
-col_mesh = bpy.data.meshes.new("GroundCol")
-col_bm.to_mesh(col_mesh)
-print("@ground collision tris", sum(len(f.verts) - 2 for f in col_bm.faces))
-col_bm.free()
-col_obj = bpy.data.objects.new("GroundCol-colonly", col_mesh)
-bpy.context.collection.objects.link(col_obj)
-col_obj.parent = root
-ground.name = "Ground"
-ground.parent = root
+col_obj = None
 cells = {k: [o for o in v if o is not col_obj] for k, v in cells.items()}
 for (ix, iy), objs in cells.items():
     if not objs:

@@ -26,6 +26,8 @@ var mode: GameMode
 var hq_spawn := Vector3.ZERO
 var hq_garage := Vector3.ZERO
 var bank_position := Vector3.ZERO
+## The modelled city (null = the old procedural blocks).
+var imported_city: ImportedCity
 var pawn_shop_position := Vector3.ZERO
 var precinct_position := Vector3.ZERO
 var supercar_spot := Vector3.ZERO
@@ -58,8 +60,12 @@ func _ready() -> void:
 	_build_materials()
 	_build_environment()
 	_build_ground()
-	city = WorldCity.new(self)
-	city.build()
+	if ImportedCity.available():
+		imported_city = ImportedCity.new(self)
+		imported_city.build()
+	else:
+		city = WorldCity.new(self)
+		city.build()
 	regions = WorldRegions.new(self)
 	regions.build()
 	nature = WorldNature.new(self)
@@ -250,7 +256,8 @@ func _build_ground() -> void:
 	plane.size = Vector2(640.0, 560.0)
 	asphalt.mesh = plane
 	asphalt.material_override = batcher.materials["asphalt"]
-	asphalt.position = Vector3(17.0, 0.0, 0.0)
+	# Under the modelled city's own roads/grass (no z-fighting); collider stays at 0.
+	asphalt.position = Vector3(17.0, -0.08 if ImportedCity.available() else 0.0, 0.0)
 	add_child(asphalt)
 	var grass_rect := Rect2(-1300.0, -1900.0, 1635.0, 2300.0)
 	var grass := MeshInstance3D.new()
@@ -408,16 +415,19 @@ func _limit_rank(id: String) -> String:
 func road_points() -> Array[Vector3]:
 	if not _road_points.is_empty():
 		return _road_points
-	for ix in WorldCity.BLOCKS_X + 1:
-		var z := -WorldCity.HALF_Z + 12.0
-		while z < WorldCity.HALF_Z - 12.0:
-			_road_points.append(Vector3(WorldCity.street_x(ix), 0.3, z))
-			z += 25.0
-	for iz in WorldCity.BLOCKS_Z + 1:
-		var x := -WorldCity.HALF_X + 12.0
-		while x < WorldCity.HALF_X - 12.0:
-			_road_points.append(Vector3(x, 0.3, WorldCity.street_z(iz)))
-			x += 25.0
+	if imported_city:
+		_road_points.append_array(imported_city.road_points())
+	else:
+		for ix in WorldCity.BLOCKS_X + 1:
+			var z := -WorldCity.HALF_Z + 12.0
+			while z < WorldCity.HALF_Z - 12.0:
+				_road_points.append(Vector3(WorldCity.street_x(ix), 0.3, z))
+				z += 25.0
+		for iz in WorldCity.BLOCKS_Z + 1:
+			var x := -WorldCity.HALF_X + 12.0
+			while x < WorldCity.HALF_X - 12.0:
+				_road_points.append(Vector3(x, 0.3, WorldCity.street_z(iz)))
+				x += 25.0
 	for i in range(0, regions.highway_samples.size(), 3):
 		_road_points.append(regions.highway_samples[i] + Vector3.UP * 0.3)
 	for i in range(0, regions.forest_road_samples.size(), 2):
@@ -451,11 +461,18 @@ func _spawn_cars() -> void:
 			Vector3(-372.0, ground_height(-372.0, -1462.0) + 0.5, -1462.0),             # by the ranger tower
 			extraction_points.get("suburb", supercar_spot),                            # end of the suburb street
 			regions.highway_samples[regions.highway_samples.size() / 3] + Vector3(14, 0.3, 0),   # highway lay-by
-			WorldCity.block_center(5, 0) + Vector3(0, 0.3, WorldCity.BLOCK_D * 0.5 + 2.0),       # downtown side street
+			(imported_city.spot_away_from(hq_spawn, 150.0, luck) + Vector3.UP * 0.3) if imported_city
+				else WorldCity.block_center(5, 0) + Vector3(0, 0.3, WorldCity.BLOCK_D * 0.5 + 2.0),   # downtown side street
 		]
 		_spawn_car("sport", hidden[luck.randi() % hidden.size()], luck.randf() * TAU, VehicleCatalog.random_paint(luck))
-	# City kerbside parking: about one per block
-	for ix in WorldCity.BLOCKS_X:
+	# City parking: roadside lots in the modelled city, or one per block.
+	if imported_city:
+		for lot: Dictionary in imported_city.parking(34, rng):
+			var lot_pos: Vector3 = (lot["pos"] as Vector3) + Vector3.UP * 0.4
+			if _spot_free(lot_pos):
+				var along: Vector3 = lot["along"]
+				_spawn_car(_limit_rank(VehicleCatalog.pick_civilian(rng)), lot_pos, atan2(along.x, along.z) + (PI if rng.randf() > 0.5 else 0.0), VehicleCatalog.random_paint(rng))
+	for ix in (0 if imported_city else WorldCity.BLOCKS_X):
 		for iz in WorldCity.BLOCKS_Z:
 			var c := WorldCity.block_center(ix, iz)
 			var side := 1.0 if rng.randf() > 0.5 else -1.0
