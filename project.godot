@@ -15,6 +15,7 @@ config/description="Open-world anti-hero action game for Android."
 config/version="0.5.0"
 run/main_scene="res://scenes/ui/main_menu.tscn"
 config/features=PackedStringArray("4.4", "Mobile")
+config/icon="res://assets/ui/icon.png"
 
 [autoload]
 

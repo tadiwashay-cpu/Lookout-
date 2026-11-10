@@ -21,6 +21,10 @@ const REGIONS := ["harbor", "suburb", "forest", "highway"]
 
 const WORLD_SCENE := "res://scenes/levels/world.tscn"
 const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
+const LOADING_SCENE := "res://scenes/ui/loading_screen.tscn"
+
+## Scene the loading screen is bringing up.
+var pending_scene := ""
 
 var mode: int = MODE_STORY
 var networked := false
@@ -42,7 +46,7 @@ func start_story() -> void:
 	networked = false
 	match_seed = randi()
 	teams = {}
-	get_tree().change_scene_to_file(WORLD_SCENE)
+	_load_world()
 
 
 ## Called on every peer (or locally for solo practice).
@@ -51,7 +55,12 @@ func start_match(new_mode: int, seed_value: int, team_map: Dictionary, is_networ
 	match_seed = seed_value
 	teams = team_map
 	networked = is_networked
-	get_tree().change_scene_to_file(WORLD_SCENE)
+	_load_world()
+
+
+func _load_world() -> void:
+	pending_scene = WORLD_SCENE
+	get_tree().change_scene_to_file(LOADING_SCENE)
 
 
 func back_to_menu() -> void:
