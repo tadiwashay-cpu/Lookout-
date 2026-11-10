@@ -73,6 +73,9 @@ const BLUR_FROM := 41.7   # m/s = 150 km/h
 var _lamp_materials: Array[StandardMaterial3D] = []
 var _lamps_on := -1.0
 var _headlights: Array[SpotLight3D] = []
+var _engine_sound: AudioStreamPlayer3D
+var _skid_sound: AudioStreamPlayer3D
+var _siren_sound: AudioStreamPlayer3D
 var _blur_layer: CanvasLayer
 var _blur_material: ShaderMaterial
 var _body_aabb := AABB()
@@ -288,6 +291,12 @@ func enter(player: PlayerController) -> void:
 		cam_view = CamView.HOOD
 	_add_light_trails()
 	_add_headlights()
+	if _engine_sound == null:
+		_engine_sound = Audio.loop(self, "engine_loop", -4.0)
+	if _skid_sound == null:
+		_skid_sound = Audio.loop(self, "skid", -6.0)
+		if _skid_sound:
+			_skid_sound.stream_paused = true
 	player.start_driving(self)
 	driver_entered.emit(player)
 
@@ -313,6 +322,11 @@ func exit() -> void:
 	if _blur_layer:
 		_blur_layer.queue_free()
 		_blur_layer = null
+	for sound in [_engine_sound, _skid_sound]:
+		if sound:
+			sound.queue_free()
+	_engine_sound = null
+	_skid_sound = null
 	contact_monitor = false
 	set_process(false)
 	player.stop_driving(_find_exit_spot(), atan2(global_basis.z.x, global_basis.z.z) + PI)
@@ -591,6 +605,12 @@ func _drive(delta: float, throttle: float, reverse: float, steer_input: float, h
 	for wheel in _front_wheels:
 		wheel.steering = _steer
 	_lay_skid_marks(speed, handbrake)
+	if is_police and (siren_on and ai_enabled) != (_siren_sound != null):
+		if _siren_sound:
+			_siren_sound.queue_free()
+			_siren_sound = null
+		else:
+			_siren_sound = Audio.loop(self, "siren_loop", -2.0)
 	if ai_enabled and is_police and siren_on:
 		_siren_time += delta
 		_flash_lights()
@@ -660,6 +680,14 @@ func _update_light_trails() -> void:
 
 func _process(delta: float) -> void:
 	_update_light_trails()
+	if _engine_sound:
+		# Rev with speed inside each "gear" so it climbs and drops like shifts.
+		var v := absf(forward_speed())
+		var in_gear := fmod(v, 14.0) / 14.0
+		_engine_sound.pitch_scale = lerpf(_engine_sound.pitch_scale, 0.7 + in_gear * 0.9 + minf(v / 60.0, 0.5), clampf(delta * 6.0, 0.0, 1.0))
+	if _skid_sound:
+		var sliding := drifting or absf(linear_velocity.dot(global_basis.x)) > 3.0
+		_skid_sound.stream_paused = not (sliding and linear_velocity.length() > 5.0)
 	if _camera == null:
 		return
 	if is_police and driver:
@@ -716,6 +744,8 @@ func _flash_lights() -> void:
 
 func _on_body_entered(body: Node) -> void:
 	var impact := linear_velocity.length()
+	if impact > 7.0:
+		Audio.play("crash", global_position, minf(impact * 0.3 - 6.0, 4.0))
 	if impact < 6.0 or not body.has_method(&"take_hit"):
 		return
 	if body is PlayerController:

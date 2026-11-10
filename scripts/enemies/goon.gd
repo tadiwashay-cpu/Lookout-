@@ -176,6 +176,7 @@ func _tick_windup(delta: float) -> void:
 		to_player.y = 0.0
 		var forward := -_model.global_basis.z
 		if to_player.length() <= attack_range + 0.4 and forward.dot(to_player.normalized()) > 0.4:
+			Audio.play("punch_light", _player.global_position + Vector3.UP)
 			_player.take_hit(attack_damage, to_player.normalized() * 4.0, self, false)
 	_cooldown = attack_cooldown + _rng.randf_range(0.0, 0.6)
 	_set_state(State.RECOVER)

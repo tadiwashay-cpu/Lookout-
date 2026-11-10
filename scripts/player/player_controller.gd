@@ -553,6 +553,10 @@ func _enemy_within(radius: float) -> bool:
 
 # ------------------------------------------------------------------ rifle
 
+func gun_sound() -> String:
+	return "gun_pistol" if rig.is_pistol() else ("gun_shotgun" if _pellets > 1 else "gun_rifle")
+
+
 func _try_fire() -> void:
 	if _reload_timer > 0.0 or _fire_cooldown > 0.0 or _throw_timer > 0.0:
 		return
@@ -589,7 +593,7 @@ func _try_fire() -> void:
 			Effects.impact(get_tree(), end)
 		if pellet < 3:
 			Effects.tracer(get_tree(), muzzle, end)
-	Effects.muzzle_flash(get_tree(), muzzle)
+	Effects.muzzle_flash(get_tree(), muzzle, gun_sound())
 	rig.kick(1.6 if _pellets > 1 or rifle_damage > 60.0 else 1.0)
 	_shake = maxf(_shake, 0.12 + clampf(rifle_damage / 400.0, 0.0, 0.3))
 	_pitch = clampf(_pitch + deg_to_rad(0.35), deg_to_rad(min_pitch_deg), deg_to_rad(max_pitch_deg))   # recoil
@@ -623,6 +627,7 @@ func _start_reload() -> void:
 	if _reload_timer > 0.0 or ammo >= mag_size or reserve <= 0:
 		return
 	_reload_timer = reload_time
+	Audio.play("reload", global_position + Vector3.UP)
 
 
 func add_ammo(amount: int) -> void:
@@ -746,6 +751,7 @@ func _start_punch(heavy: bool) -> void:
 		_attack_active_at = 0.45
 		_attack_damage = heavy_damage * 1.4
 		velocity += Basis(Vector3.UP, _model_yaw) * Vector3.FORWARD * 6.0
+	Audio.play("whoosh", global_position + Vector3.UP, -4.0, 0.15)
 	_face_nearest_enemy()
 	var clip := StringName("punch_%d" % _combo_step)
 	if flying:
@@ -798,6 +804,7 @@ func _perform_punch() -> void:
 		target.take_hit(_attack_damage, forward * (7.0 if _is_finisher() else 2.5), self, _is_finisher())
 		attack_landed.emit(target, _attack_damage, light_damage.size() if _is_finisher() else _combo_step)
 		landed = true
+		Audio.play("punch_heavy" if _is_finisher() else "punch_light", (target as Node3D).global_position + Vector3.UP)
 		var finisher_ko: bool = _is_finisher() and target.has_method(&"is_alive") and not target.call(&"is_alive")
 		if finisher_ko:
 			_play_finisher(target as Node3D)

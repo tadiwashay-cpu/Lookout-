@@ -54,7 +54,8 @@ static func tracer(tree: SceneTree, from: Vector3, to: Vector3) -> void:
 	tree.create_timer(0.05).timeout.connect(line.queue_free)
 
 
-static func muzzle_flash(tree: SceneTree, pos: Vector3) -> void:
+static func muzzle_flash(tree: SceneTree, pos: Vector3, sound: String = "gun_rifle") -> void:
+	Audio.play(sound, pos, 0.0, 0.06)
 	_init_materials()
 	var mesh := SphereMesh.new()
 	mesh.radius = 0.09
@@ -86,10 +87,12 @@ static func impact(tree: SceneTree, pos: Vector3) -> void:
 
 
 static func explosion(tree: SceneTree, pos: Vector3, radius: float) -> void:
+	Audio.play("explosion", pos, 4.0)
 	_ring(tree, pos, radius, _blast_mat_get(), 0.35)
 
 
 static func surge(tree: SceneTree, pos: Vector3, radius: float) -> void:
+	Audio.play("surge", pos, 2.0)
 	_init_materials()
 	_ring(tree, pos, radius, _surge_mat, 0.3)
 

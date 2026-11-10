@@ -20,6 +20,7 @@ var _flee_from := Vector3.ZERO
 var _wait := 0.0
 var _rng := RandomNumberGenerator.new()
 var _action_lock := 0.0
+var _female := false
 
 
 func _ready() -> void:
@@ -44,6 +45,7 @@ func _ready() -> void:
 	if _rng.randf() < 0.8:
 		# Quaternius city people (their own outfits, no tint needed).
 		var id := GameSettings.random_civilian(_rng)
+		_female = id.begins_with("civ_f")
 		rig.setup(id, _rng.randf_range(1.62, 1.74) if id.begins_with("civ_f") else _rng.randf_range(1.72, 1.88))
 	else:
 		rig.setup("npc", _rng.randf_range(1.65, 1.9))
@@ -65,6 +67,8 @@ func _on_crime(_severity: float, at: Vector3) -> void:
 	if not health.is_dead and at.distance_to(global_position) < 45.0:
 		_panic = _rng.randf_range(6.0, 10.0)
 		_flee_from = at
+		if _rng.randf() < 0.35:   # not everyone screams at once
+			Audio.play("scream_female" if _female else "scream_male", global_position + Vector3.UP * 1.6, 0.0, 0.1, 3)
 
 
 func _physics_process(delta: float) -> void:

@@ -233,7 +233,7 @@ func _shoot() -> void:
 				(victim as PlayerController).last_attacker_peer = bot_id
 			victim.take_hit(float(_weapon["damage"]) * damage_scale, (end - from).normalized() * 1.2, self, false)
 		Effects.impact(get_tree(), end)
-	Effects.muzzle_flash(get_tree(), from)
+	Effects.muzzle_flash(get_tree(), from, "gun_pistol" if rig.is_pistol() else "gun_rifle")
 	Effects.tracer(get_tree(), from, end)
 	rig.kick()
 
@@ -264,6 +264,7 @@ func _melee() -> void:
 		return
 	if target is PlayerController:
 		(target as PlayerController).last_attacker_peer = bot_id   # KO credit
+	Audio.play("punch_heavy" if heavy else "punch_light", target.global_position + Vector3.UP)
 	target.take_hit(melee_damage * (1.6 if heavy else 1.0), offset.normalized() * (6.0 if heavy else 3.0), self, heavy)
 
 
