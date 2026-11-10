@@ -11,10 +11,6 @@
   "length": 0.533,
   "ground_speed": 2.594
  },
- "walk": {
-  "length": 1.367,
-  "ground_speed": 0.918
- },
  "turn_right": {
   "length": 1.0,
   "ground_speed": 0.0
@@ -119,20 +115,32 @@
   "length": 1.033,
   "ground_speed": 1.59
  },
- "walk_start": {
-  "length": 2.933,
-  "ground_speed": 0.622
- },
- "walk_stop": {
-  "length": 3.0,
-  "ground_speed": 0.368
- },
- "idle_unarmed": {
-  "length": 0.633,
-  "ground_speed": 0.368
- },
  "walk_back_unarmed": {
   "length": 1.2,
   "ground_speed": 1.04
+ },
+ "kick_front": {
+  "length": 2.2,
+  "ground_speed": 0.097
+ },
+ "boxing": {
+  "length": 3.0,
+  "ground_speed": 0.037
+ },
+ "fight_idle": {
+  "length": 2.0,
+  "ground_speed": 0.018
+ },
+ "ko_loser": {
+  "length": 3.0,
+  "ground_speed": 0.049
+ },
+ "ko_winner": {
+  "length": 4.0,
+  "ground_speed": 0.043
+ },
+ "kick_round": {
+  "length": 2.3,
+  "ground_speed": 0.271
  }
 }

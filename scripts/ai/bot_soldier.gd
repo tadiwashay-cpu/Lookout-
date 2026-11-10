@@ -27,6 +27,7 @@ var accuracy := 0.7               # 0..1
 var damage_scale := 0.7           # bots hit softer than players
 var max_health := 100.0
 var melee_only := false           # cops at 1 star try to tackle, not shoot
+var melee_damage := 12.0
 
 var health: HealthComponent
 var rig: CharacterRig
@@ -90,6 +91,8 @@ func is_alive() -> bool:
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
+	if melee_only:
+		rig.fight_ready = _target != null and is_instance_valid(_target) and global_position.distance_to(_target.global_position) < 8.0
 	if health.is_dead:
 		velocity.x = move_toward(velocity.x, 0.0, 8.0 * delta)
 		velocity.z = move_toward(velocity.z, 0.0, 8.0 * delta)
@@ -151,9 +154,10 @@ func _physics_process(delta: float) -> void:
 	if _action_lock > 0.0:
 		pass   # let a one-shot (punch, flinch) finish
 	elif _reload > 0.0:
-		rig.play(&"reload", rig.clip_length(&"reload") / float(_weapon["reload"]))
+		var reload := rig.reload_clip()
+		rig.play(reload, rig.clip_length(reload) / float(_weapon["reload"]))
 	elif flat.length() < 0.3 and _fire_cd > 0.0 and not melee_only:
-		rig.play(&"fire")
+		rig.play(rig.fire_clip())
 	else:
 		rig.play_locomotion(flat.dot(facing * Vector3.RIGHT), flat.dot(facing * Vector3.FORWARD))
 
@@ -216,6 +220,8 @@ func _shoot() -> void:
 		end = hit["position"]
 		var victim = hit["collider"]
 		if victim and victim.has_method(&"take_hit") and victim != self:
+			if victim is PlayerController:
+				(victim as PlayerController).last_attacker_peer = bot_id
 			victim.take_hit(float(_weapon["damage"]) * damage_scale, (end - from).normalized() * 1.2, self, false)
 		Effects.impact(get_tree(), end)
 	Effects.muzzle_flash(get_tree(), from)
@@ -224,12 +230,28 @@ func _shoot() -> void:
 
 
 func _melee() -> void:
-	_fire_cd = 1.4
-	rig.replay(&"punch_1", 1.6)
-	_action_lock = rig.clip_length(&"punch_1") / 1.6
-	if _target and _target.has_method(&"take_hit"):
-		var push := (_target.global_position - global_position).normalized() * 3.0
-		_target.take_hit(12.0, push, self, false)
+	_fire_cd = _rng.randf_range(1.1, 1.7)
+	var clips := [&"punch_1", &"punch_2", &"punch_3", &"kick_front", &"punch_heavy"]
+	var clip: StringName = clips[_rng.randi() % clips.size()]
+	if not rig.has_clip(clip):
+		clip = &"punch_1"
+	var heavy := clip == &"kick_front" or clip == &"punch_heavy"
+	rig.replay(clip, 1.5)
+	_action_lock = rig.clip_length(clip) / 1.5
+	var target := _target
+	# The hit lands on the swing, not the instant the bot decides to attack.
+	await get_tree().create_timer(0.3).timeout
+	if not is_inside_tree() or health.is_dead or target == null or not is_instance_valid(target):
+		return
+	var offset := target.global_position - global_position
+	offset.y = 0.0
+	if offset.length() > 2.4 or not target.has_method(&"take_hit"):
+		return
+	if target.has_method(&"is_alive") and not target.call(&"is_alive"):
+		return
+	if target is PlayerController:
+		(target as PlayerController).last_attacker_peer = bot_id   # KO credit
+	target.take_hit(melee_damage * (1.6 if heavy else 1.0), offset.normalized() * (6.0 if heavy else 3.0), self, heavy)
 
 
 ## Simple obstacle feeler: turn away from walls straight ahead.
@@ -259,7 +281,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, _heavy: bool 
 		_target = attacker
 		_reaction = 0.2
 	if not health.is_dead:
-		rig.replay(&"hit", 1.8, 0.05)
+		rig.replay(rig.hit_clip(), 1.8, 0.05)
 		_action_lock = 0.3
 
 
@@ -268,7 +290,10 @@ func _on_died() -> void:
 	remove_from_group(&"bots")
 	collision_layer = 0
 	collision_mask = WORLD_LAYER
-	rig.replay(&"death", 1.3, 0.1)
+	var death: StringName = &"ko_loser" if melee_only else [&"death_back", &"death_front"][_rng.randi() % 2]
+	if not rig.has_clip(death):
+		death = &"death"
+	rig.replay(death, 1.3, 0.1)
 	rig.armed = false
 	died.emit(self, _last_attacker)
 	await get_tree().create_timer(10.0).timeout

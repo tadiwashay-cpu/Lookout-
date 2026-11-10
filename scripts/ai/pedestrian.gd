@@ -71,7 +71,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 	var move := Vector3.ZERO
-	var speed := 1.3
+	var speed := 1.5   # matches the walk clip's stride (1.51 m/s)
 	if _panic > 0.0:
 		_panic -= delta
 		move = (global_position - _flee_from)
@@ -80,13 +80,19 @@ func _physics_process(delta: float) -> void:
 		speed = 4.8
 	elif _wait > 0.0:
 		_wait -= delta
+		if _wait <= 0.0 and _action_lock <= 0.0 and rig.has_clip(&"walk_start"):
+			rig.replay(&"walk_start", 1.2, 0.15)   # step off from standing
+			_action_lock = 0.5
 	else:
 		move = _goal - global_position
 		move.y = 0.0
 		if move.length() < 1.5:
-			_wait = _rng.randf_range(1.0, 4.0)
+			_wait = _rng.randf_range(1.5, 5.0)
 			_new_goal()
 			move = Vector3.ZERO
+			if rig.has_clip(&"walk_stop"):
+				rig.replay(&"walk_stop", 1.2, 0.15)   # plant the feet, then idle
+				_action_lock = 0.55
 		else:
 			move = move.normalized()
 	move = _avoid(move)
@@ -127,7 +133,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, _heavy: bool 
 	if attacker is PlayerController or attacker is DrivableCar:
 		WantedSystem.report_crime(WantedSystem.CRIME_ASSAULT_CIVILIAN, global_position)
 	if not health.is_dead:
-		rig.replay(&"hit_unarmed", 1.6, 0.05)
+		rig.replay(rig.hit_clip(), 1.6, 0.05)
 		_action_lock = 0.6
 
 
@@ -135,7 +141,7 @@ func _on_died() -> void:
 	remove_from_group(&"civilians")
 	collision_layer = 0
 	collision_mask = WORLD_LAYER
-	rig.replay(&"death", 1.2, 0.1)
+	rig.replay([&"death_back", &"death_front"][_rng.randi() % 2] if rig.has_clip(&"death_back") else &"death", 1.2, 0.1)
 	await get_tree().create_timer(12.0).timeout
 	if is_inside_tree():
 		queue_free()

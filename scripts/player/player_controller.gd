@@ -109,7 +109,16 @@ var _spring: SpringArm3D
 var _camera: Camera3D
 var _model: Node3D
 
-var _wants_armed := true
+var _wants_armed := false   # gun stays holstered until you shoot/aim (normal locomotion otherwise)
+var _holster_timer := 0.0
+var _prev_speed := 0.0
+var _stop_anim := 0.0   # a run/walk-stop clip is playing; any new input cancels it
+var _stance_check := 0.0
+var _heavy_variant := 0
+## Clean Hands mode: the surge only works when the meter (filled by landing hits) is full.
+var surge_needs_meter := false
+var surge_meter := 0.0
+const HOLSTER_AFTER := 10.0
 var _fire_cooldown := 0.0
 var _reload_timer := 0.0
 var _grenade_timer := 0.0
@@ -219,6 +228,8 @@ func grenade_ready() -> float:
 
 
 func surge_ready() -> float:
+	if surge_needs_meter:
+		return clampf(surge_meter / 100.0, 0.0, 1.0)
 	return 1.0 - clampf(_surge_timer / surge_cooldown, 0.0, 1.0)
 
 
@@ -313,7 +324,21 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed(&"swap_weapon") and weapons_allowed:
 		_wants_armed = not _wants_armed
 		_reload_timer = 0.0
+		_holster_timer = HOLSTER_AFTER
 		_refresh_armed()
+	# Draw the gun the moment you shoot or aim; put it away when you stop using it.
+	if weapons_allowed and not _wants_armed and (Input.is_action_just_pressed(&"fire") or Input.is_action_just_pressed(&"aim")):
+		_wants_armed = true
+		_holster_timer = HOLSTER_AFTER
+		_refresh_armed()
+	if _wants_armed and weapons_allowed:
+		if Input.is_action_pressed(&"fire") or aiming or _reload_timer > 0.0:
+			_holster_timer = HOLSTER_AFTER
+		else:
+			_holster_timer -= delta
+			if _holster_timer <= 0.0:
+				_wants_armed = false
+				_refresh_armed()
 
 	_update_nearby_vehicle()
 	if Input.is_action_just_pressed(&"interact") and nearby_vehicle and not _attacking \
@@ -345,7 +370,7 @@ func _physics_process(delta: float) -> void:
 
 	var target_speed := run_speed * input_vec.length()
 	if Input.is_action_pressed(&"sprint") and input_vec.length() > 0.1 and not aiming:
-		target_speed = sprint_speed
+		target_speed = sprint_speed if is_armed() else 7.4   # unarmed sprint is faster
 	if aiming:
 		target_speed = minf(target_speed, aim_speed)
 	if blocking:
@@ -404,25 +429,60 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 		_model_yaw = lerp_angle(_model_yaw, atan2(-move_dir.x, -move_dir.z), clampf(turn_speed * delta, 0.0, 1.0))
 	_model.rotation.y = _model_yaw
 
+	_stop_anim = maxf(_stop_anim - delta, 0.0)
 	if _action_lock > 0.0 or _attacking or _throw_timer > 0.0 or health.is_dead:
+		_prev_speed = 0.0
 		return
 	if _air_time > 0.55 and velocity.y < -3.0:
-		rig.play(&"fall", 1.0, 0.2)
+		rig.play(&"falling" if rig.has_clip(&"falling") else &"fall", 1.0, 0.2)
 		return
 	if blocking:
 		rig.play(&"block", 1.0, 0.1)
 		return
 	if _reload_timer > 0.0:
-		rig.play(&"reload", rig.clip_length(&"reload") / reload_time, 0.1)
+		var reload := rig.reload_clip()
+		rig.play(reload, rig.clip_length(reload) / reload_time, 0.1)
 		return
 	var facing := Basis(Vector3.UP, _model_yaw)
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
+	var speed := flat.length()
 	var local_forward := flat.dot(facing * Vector3.FORWARD)
 	var local_right := flat.dot(facing * Vector3.RIGHT)
-	if flat.length() < 0.3 and is_armed() and _fire_cooldown > 0.0:
-		rig.play(&"fire", 1.0, 0.08)   # steady firing loop while the trigger is held
+	if speed < 0.3 and is_armed() and _fire_cooldown > 0.0:
+		rig.play(rig.fire_clip(), 1.0, 0.08)   # steady firing loop while the trigger is held
 		return
+	# Natural stops: run-to-stop / walk-to-stop when you let go of the stick.
+	if _stop_anim > 0.0:
+		if speed < 0.6 and move_dir.length() < 0.1:
+			return
+		_stop_anim = 0.0
+	# _prev_speed holds the speed you had while the stick was held.
+	if not is_armed() and is_on_floor() and move_dir.length() < 0.1 and speed < 1.5:
+		var stop := &""
+		if _prev_speed > 4.0:
+			stop = &"run_stop"
+		elif _prev_speed > 1.0:
+			stop = &"walk_stop"
+		_prev_speed = 0.0
+		if stop != &"" and rig.has_clip(stop):
+			rig.replay(stop, 1.4, 0.12)
+			_stop_anim = 0.45
+			return
+	if move_dir.length() > 0.1:
+		_prev_speed = speed
+	_stance_check -= delta
+	if _stance_check <= 0.0:
+		_stance_check = 0.3
+		rig.fight_ready = not is_armed() and (Session.mode == Session.MODE_CLEAN_HANDS or _enemy_within(7.0))
 	rig.play_locomotion(local_right, local_forward)
+
+
+func _enemy_within(radius: float) -> bool:
+	for node in get_tree().get_nodes_in_group(&"enemies") + get_tree().get_nodes_in_group(&"remote_players"):
+		var other := node as Node3D
+		if other and other.global_position.distance_to(global_position) < radius:
+			return true
+	return false
 
 
 # ------------------------------------------------------------------ rifle
@@ -553,7 +613,11 @@ func refill_grenades(count: int) -> void:
 # ----------------------------------------------------------------- surge
 
 func _try_surge() -> void:
-	if _surge_timer > 0.0:
+	if surge_needs_meter:
+		if surge_meter < 100.0:
+			return
+		surge_meter = 0.0
+	elif _surge_timer > 0.0:
 		return
 	_surge_timer = surge_cooldown
 	Effects.surge(get_tree(), global_position + Vector3.UP, surge_radius)
@@ -617,7 +681,15 @@ func _start_punch(heavy: bool) -> void:
 		_attack_damage = heavy_damage * 1.4
 		velocity += Basis(Vector3.UP, _model_yaw) * Vector3.FORWARD * 6.0
 	_face_nearest_enemy()
-	var clip := &"flying_kick" if flying else (&"punch_heavy" if heavy else StringName("punch_%d" % _combo_step))
+	var clip := StringName("punch_%d" % _combo_step)
+	if flying:
+		clip = &"flying_kick"
+	elif heavy:
+		# Mix up the heavy attack: front kick, roundhouse, kick.
+		clip = [&"kick_front", &"kick_round", &"punch_heavy"][_heavy_variant % 3]
+		_heavy_variant += 1
+		if not rig.has_clip(clip):
+			clip = &"punch_heavy"
 	if not rig.replay(clip, rig.clip_length(clip) / _attack_duration, 0.06):
 		# No punch clips yet: a body lunge so hits still read.
 		var lunge := Vector3(0.0, 0.0, -0.35 if heavy else -0.2).rotated(Vector3.UP, _model_yaw)
@@ -660,6 +732,8 @@ func _perform_punch() -> void:
 		target.take_hit(_attack_damage, forward * (7.0 if _is_finisher() else 2.5), self, _is_finisher())
 		attack_landed.emit(target, _attack_damage, light_damage.size() if _is_finisher() else _combo_step)
 		landed = true
+		if surge_needs_meter:
+			surge_meter = minf(surge_meter + (25.0 if _is_finisher() else 12.0), 100.0)
 	if landed:
 		_hit_stop(0.08 if _is_finisher() else 0.045)
 		_shake = 0.55 if _is_finisher() else 0.3
@@ -716,7 +790,7 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 	if heavy:
 		_attacking = false
 	if not _attacking and _action_lock <= 0.0 and not blocking:
-		rig.replay(&"hit" if is_armed() else &"hit_unarmed", 1.6, 0.05)
+		rig.replay(rig.hit_clip(), 1.6, 0.05)
 		_action_lock = 0.35
 
 
@@ -738,7 +812,10 @@ func _on_died() -> void:
 		current_vehicle.exit()
 	_attacking = false
 	aiming = false
-	if not rig.replay(&"death", 1.3, 0.1):
+	var death := &"ko_loser" if not is_armed() and rig.has_clip(&"ko_loser") else ([&"death_back", &"death_front", &"death"][randi() % 3])
+	if not rig.has_clip(death):
+		death = &"death"
+	if not rig.replay(death, 1.2, 0.1):
 		create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
 	knocked_out.emit()
 	if Session.mode != Session.MODE_STORY:
@@ -755,7 +832,7 @@ func _respawn() -> void:
 	global_position = spawn_point
 	velocity = Vector3.ZERO
 	_model.rotation.x = 0.0
-	rig.play(&"idle" if is_armed() else &"idle_unarmed", 1.0, 0.0)
+	rig.play(rig.idle_clip(), 1.0, 0.0)
 	health.revive()
 	ammo = mag_size
 	reserve = maxi(reserve, start_reserve / 2)

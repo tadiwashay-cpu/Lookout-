@@ -23,6 +23,8 @@ var _results: PanelContainer
 var _banner_tween: Tween
 var _clock: Label
 var _bust: ProgressBar
+var _surge_bar: ProgressBar
+var _surge_fill: StyleBoxFlat
 var _hint_tween: Tween
 
 
@@ -60,6 +62,18 @@ func _ready() -> void:
 	_bust.max_value = 1.0
 	_bust.visible = false
 	_root.add_child(_bust)
+
+	# Surge meter (Clean Hands): fills as your punches land, glows when full.
+	_surge_bar = ProgressBar.new()
+	_surge_bar.show_percentage = false
+	_surge_bar.position = Vector2(28, 340)
+	_surge_bar.size = Vector2(240, 12)
+	_surge_bar.max_value = 1.0
+	_surge_fill = _flat_box(Color(1.0, 0.62, 0.2))
+	_surge_bar.add_theme_stylebox_override("background", _flat_box(Color(0, 0, 0, 0.5)))
+	_surge_bar.add_theme_stylebox_override("fill", _surge_fill)
+	_surge_bar.visible = false
+	_root.add_child(_surge_bar)
 
 	_wanted = WantedStars.new()
 	_place(_wanted, Control.PRESET_TOP_RIGHT, -420, 18, -120, 74)
@@ -141,6 +155,12 @@ func _process(_delta: float) -> void:
 		if _bust.visible:
 			_hint.text = "BUSTED…  get moving!"
 			_hint.modulate.a = 1.0
+	_surge_bar.visible = _player.surge_needs_meter and _player.current_vehicle == null
+	if _surge_bar.visible:
+		var fill := _player.surge_ready()
+		_surge_bar.value = fill
+		var pulse := 0.75 + 0.25 * sin(Time.get_ticks_msec() * 0.012)
+		_surge_fill.bg_color = Color(1.0, 0.85, 0.35) * pulse if fill >= 1.0 else Color(1.0, 0.55, 0.2)
 	_crosshair.visible = _player.is_armed() and _player.current_vehicle == null and _player.is_alive()
 	_crosshair.queue_redraw()
 	if _player.is_armed():

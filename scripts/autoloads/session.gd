@@ -6,12 +6,14 @@ const MODE_STORY := 0
 const MODE_BATTLE_ROYALE := 1
 const MODE_STREET_RACE := 2
 const MODE_HEIST := 3
+const MODE_CLEAN_HANDS := 4
 
 const MODE_NAMES := {
 	MODE_STORY: "Story",
 	MODE_BATTLE_ROYALE: "Battle Royale",
 	MODE_STREET_RACE: "Street Race",
 	MODE_HEIST: "Robbers vs Police",
+	MODE_CLEAN_HANDS: "Clean Hands",
 }
 
 ## Multiplayer spawn regions (the city itself is the story's home turf).

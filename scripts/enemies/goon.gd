@@ -87,6 +87,7 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= _gravity * delta
 	if _player == null:
 		_player = get_tree().get_first_node_in_group(&"player") as PlayerController
+	_rig().fight_ready = _state != State.IDLE and _player_in_range(9.0)   # guard up when squaring off
 
 	match _state:
 		State.IDLE:
@@ -103,7 +104,7 @@ func _physics_process(delta: float) -> void:
 		State.KNOCKDOWN:
 			_brake(delta, 6.0)
 			if _state_time >= 1.3:
-				_rig().play(&"idle_unarmed", 1.0, 0.3)
+				_rig().play(_rig().idle_clip(), 1.0, 0.3)
 				_set_state(State.CHASE)
 		State.DEAD:
 			_brake(delta, 6.0)
@@ -163,7 +164,10 @@ func _tick_windup(delta: float) -> void:
 	_body_material.emission = Color(0.9, 0.25, 0.1) * pulse
 	if _state_time < delta * 1.5:
 		# Telegraph: the wind-up of the punch is visible before it lands.
-		_rig().replay(&"punch_1", _rig().clip_length(&"punch_1") / (windup_time + 0.4), 0.08)
+		var attack: StringName = [&"punch_1", &"punch_2", &"punch_3", &"kick_front"][_rng.randi() % 4]
+		if not _rig().has_clip(attack):
+			attack = &"punch_1"
+		_rig().replay(attack, _rig().clip_length(attack) / (windup_time + 0.4), 0.08)
 	if _state_time < windup_time:
 		return
 	_body_material.emission = Color.BLACK
@@ -207,7 +211,7 @@ func _on_died() -> void:
 	remove_from_group(&"enemies")
 	collision_layer = 0
 	collision_mask = WORLD_LAYER
-	_rig().replay(&"death", 1.3, 0.05)
+	_rig().replay(&"ko_loser" if _rig().has_clip(&"ko_loser") else &"death", 1.3, 0.05)
 	defeated.emit(self)
 	await get_tree().create_timer(8.0).timeout
 	queue_free()

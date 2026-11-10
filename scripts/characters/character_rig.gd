@@ -10,16 +10,23 @@ extends Node3D
 ## right hand, so it follows every animation (reload, grenade toss...).
 
 const LOOPING: Array[StringName] = [
-	&"idle", &"idle_unarmed", &"walk", &"walk_back", &"walk_back_unarmed", &"run", &"run_back",
+	&"idle", &"idle_unarmed", &"fight_idle", &"walk", &"run_unarmed", &"sprint", &"falling",
+	&"walk_back", &"walk_back_unarmed", &"run", &"run_back",
 	&"strafe_left", &"strafe_right", &"strafe_left_run", &"strafe_right_run",
-	&"strafe_left_unarmed", &"strafe_right_unarmed", &"fire", &"block",
+	&"strafe_left_unarmed", &"strafe_right_unarmed", &"fire", &"block", &"boxing",
+	&"pistol_idle", &"pistol_walk", &"shotgun_idle", &"shotgun_walk",
 ]
 ## Metres per second each locomotion clip covers at speed 1 (measured on import).
 const GROUND_SPEED := {
-	&"walk": 0.92, &"walk_back": 1.01, &"walk_back_unarmed": 1.0, &"run": 2.9, &"run_back": 2.53,
+	&"walk": 1.51, &"run_unarmed": 5.12, &"sprint": 7.76,
+	&"walk_back": 1.01, &"walk_back_unarmed": 1.0, &"run": 2.9, &"run_back": 2.53,
 	&"strafe_left": 1.26, &"strafe_right": 0.7, &"strafe_left_run": 2.59, &"strafe_right_run": 3.04,
 	&"strafe_left_unarmed": 1.6, &"strafe_right_unarmed": 1.6,
+	&"pistol_walk": 1.59, &"shotgun_walk": 1.55,
 }
+## Gun clip sets by weapon class.
+const PISTOL_CLASSES := ["pistol"]
+const LONG_GUN_CLASSES := ["rifle", "smg", "lmg", "sniper", "shotgun"]
 
 ## Weapon fit per character model, shared by every instance (hand-local).
 static var _fit_cache: Dictionary = {}
@@ -28,6 +35,9 @@ var anim: AnimationPlayer
 var skeleton: Skeleton3D
 var weapon: Node3D
 var weapon_id := ""
+var weapon_class := "rifle"
+## Unarmed: use the fighting stance instead of the relaxed idle (enemies near).
+var fight_ready := false
 var muzzle: Node3D
 var armed := true:
 	set(value):
@@ -112,6 +122,7 @@ func set_weapon(id: String) -> void:
 	if id == "":
 		return
 	var data := WeaponCatalog.get_data(id)
+	weapon_class = data["class"]
 	weapon = (load(data["path"]) as PackedScene).instantiate() as Node3D
 	weapon.top_level = true
 	add_child(weapon)
@@ -221,31 +232,67 @@ func replay(clip: StringName, speed: float = 1.0, blend: float = 0.05) -> bool:
 	return true
 
 
-## Pick idle / walk / run / backwards / strafe from velocity in the
-## character's frame, using the armed or unarmed clip set.
+func is_pistol() -> bool:
+	return armed and weapon_class in PISTOL_CLASSES
+
+
+## Clip names that depend on what you're holding.
+func idle_clip() -> StringName:
+	if not armed:
+		return &"fight_idle" if fight_ready and has_clip(&"fight_idle") else &"idle_unarmed"
+	if is_pistol() and has_clip(&"pistol_idle"):
+		return &"pistol_idle"
+	return &"idle"
+
+
+func fire_clip() -> StringName:
+	return &"pistol_fire" if is_pistol() and has_clip(&"pistol_fire") else &"fire"
+
+
+func reload_clip() -> StringName:
+	return &"pistol_reload" if is_pistol() and has_clip(&"pistol_reload") else &"reload"
+
+
+func hit_clip() -> StringName:
+	return &"hit" if armed else &"hit_unarmed"
+
+
+## Pick idle / walk / run / sprint / backwards / strafe from velocity in the
+## character's frame. Unarmed uses normal locomotion; the gun sets are only
+## used while a weapon is out.
 func play_locomotion(local_right: float, local_forward: float) -> void:
 	var speed := Vector2(local_right, local_forward).length()
 	if speed < 0.3:
-		play(&"idle" if armed else &"idle_unarmed")
+		play(idle_clip(), 1.0, 0.2)
 		return
-	var running := speed > 2.1
 	var clip: StringName
-	if absf(local_forward) >= absf(local_right) * 0.8:
-		if local_forward > 0.0:
-			clip = &"run" if running else &"walk"
-		elif armed:
-			clip = &"run_back" if running else &"walk_back"
+	var forwardish := absf(local_forward) >= absf(local_right) * 0.8
+	if not armed:
+		if forwardish and local_forward > 0.0:
+			clip = &"walk" if speed < 2.6 else (&"run_unarmed" if speed < 6.0 else &"sprint")
+		elif forwardish:
+			clip = &"walk_back_unarmed" if speed < 2.4 else &"run_back"
 		else:
-			clip = &"run_back" if running else &"walk_back_unarmed"
+			clip = StringName("strafe_%s_unarmed" % ("right" if local_right > 0.0 else "left"))
+			if speed > 2.6:
+				clip = StringName("strafe_%s_run" % ("right" if local_right > 0.0 else "left"))
+	elif is_pistol():
+		if forwardish and local_forward > 0.0:
+			clip = &"pistol_walk" if speed < 2.6 else &"run_unarmed"
+		elif forwardish:
+			clip = &"walk_back" if speed < 2.4 else &"run_back"
+		else:
+			clip = StringName("strafe_%s%s" % ["right" if local_right > 0.0 else "left", "_run" if speed > 2.1 else ""])
 	else:
-		var side := "right" if local_right > 0.0 else "left"
-		if running:
-			clip = StringName("strafe_%s_run" % side)
-		elif armed:
-			clip = StringName("strafe_%s" % side)
+		if forwardish and local_forward > 0.0:
+			clip = &"shotgun_walk" if speed < 2.3 and has_clip(&"shotgun_walk") else &"run"
+		elif forwardish:
+			clip = &"run_back" if speed > 2.1 else &"walk_back"
 		else:
-			clip = StringName("strafe_%s_unarmed" % side)
-	play(clip, clampf(speed / float(GROUND_SPEED.get(clip, 1.0)), 0.6, 1.9))
+			clip = StringName("strafe_%s%s" % ["right" if local_right > 0.0 else "left", "_run" if speed > 2.1 else ""])
+	if not has_clip(clip):
+		clip = &"walk"
+	play(clip, clampf(speed / float(GROUND_SPEED.get(clip, 1.0)), 0.6, 1.8), 0.18)
 
 
 func _fit_height(model: Node3D, height: float) -> void:

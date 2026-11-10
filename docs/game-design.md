@@ -154,6 +154,20 @@ the game.** Players learn them by driving.
   - Battle Royale: 9 armed bots that follow the zone and fight everyone.
   - Street Race: 3 AI racers.
   - Robbers vs Police: officers on foot plus a pursuit.
+  - Clean Hands: 5 brawler bots that punch and kick each other and you.
+
+## 6d2. Movement and animation
+- Unarmed is the default: walk, run, sprint, start and stop steps,
+  falling, and a fighting stance when enemies are close.
+- The gun comes out only when you shoot, aim or press SWAP. It goes
+  away after 10 seconds without use. Pistols use pistol idle, walk and
+  reload clips. Long guns use rifle and shotgun clips.
+- Fist combos: three punches; HEAVY alternates front kick, roundhouse
+  and heavy punch; flying kick while sprinting. A knock-out plays the
+  KO fall.
+- Pedestrians: walk, stop and idle, with start/stop steps, and run when
+  they panic. Goons raise their guard when you're close.
+- Cars leave skid marks when drifting or handbraking.
 
 ## 6e. Guns and the shop
 13 guns with distinct stats (`scripts/weapons/weapon_catalog.gd`): the
@@ -168,7 +182,6 @@ Deagle, SPAS-12 (8 pellets), AWP and M249. Buy and equip them in
   the forest.
 - About 330 rocks: cover clusters in the forest, highway shoulders,
   suburb, park and harbour.
-- Light motion blur (Settings; off on Low).
 
 ## 7. Factions
 - **Low Tide crew**: street gang terrorising the market. Red bandanas.

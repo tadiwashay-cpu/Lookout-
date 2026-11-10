@@ -14,6 +14,110 @@ Writes OUT.json with each clip's length and ground speed.
 """
 import json, os, re, sys
 import bpy
+from mathutils import Matrix, Vector, Quaternion
+
+# --- Retargeting (tools/extract_fbx6_anim.py JSON, Y-up source facing +Z) ---
+RETARGET_MAP = {
+    "Pelvis": "Hips", "Spine1": "Spine", "Spine2": "Spine1", "Spine3": "Spine2", "Neck_Base": "Neck", "Head": "Head",
+    "L_Clavicle": "LeftShoulder", "L_Arm": "LeftArm", "L_Forearm": "LeftForeArm", "L_Hand": "LeftHand",
+    "R_Clavicle": "RightShoulder", "R_Arm": "RightArm", "R_Forearm": "RightForeArm", "R_Hand": "RightHand",
+    "L_Thigh": "LeftUpLeg", "L_Shin": "LeftLeg", "L_Ankle": "LeftFoot",
+    "R_Thigh": "RightUpLeg", "R_Shin": "RightLeg", "R_Ankle": "RightFoot",
+}
+# Limbs are retargeted by aiming each bone along the source bone direction
+# (works across different rest poses: A-pose source, T-pose Mixamo target).
+AIM_CHILD = {
+    "L_Clavicle": "L_Arm", "L_Arm": "L_Forearm", "L_Forearm": "L_Hand", "L_Hand": "L_Middle1",
+    "R_Clavicle": "R_Arm", "R_Arm": "R_Forearm", "R_Forearm": "R_Hand", "R_Hand": "R_Middle1",
+    "L_Thigh": "L_Shin", "L_Shin": "L_Ankle", "L_Ankle": "L_Toes",
+    "R_Thigh": "R_Shin", "R_Shin": "R_Ankle", "R_Ankle": "R_Toes",
+}
+# Source (x, y, z) Y-up facing +Z  ->  Blender Z-up facing -Y.
+C = Matrix(((1, 0, 0), (0, 0, -1), (0, 1, 0)))
+LOOP_RETARGET = {"idle_unarmed", "walk", "run_unarmed", "sprint", "falling", "pistol_idle", "pistol_walk", "shotgun_idle", "shotgun_walk"}
+
+
+def _m(values):
+    """12 floats (columns c0..c3) -> (3x3 rotation normalised, position)."""
+    rot = Matrix(((values[0], values[3], values[6]), (values[1], values[4], values[7]), (values[2], values[5], values[8]))).normalized()
+    return rot, Vector((values[9], values[10], values[11]))
+
+
+def retarget_clips(rig, prefix, json_path):
+    data = json.load(open(json_path))
+    arm_mw = rig.matrix_world.copy()
+    arm_rot = arm_mw.to_3x3().normalized()
+    arm_inv = arm_mw.inverted()
+    bones = rig.data.bones
+    order = [b for b in bones if b.name.split(":", 1)[-1] in RETARGET_MAP.values()]   # parents before children
+    tgt_of = {v: k for k, v in RETARGET_MAP.items()}
+    hips_rest_world = arm_mw @ bones[prefix + "Hips"].head_local
+    clips = []
+    for clip, payload in data.items():
+        rest = {k: _m(v) for k, v in payload["rest"].items()}
+        frames = payload["frames"]
+        n = len(frames)
+        scale = hips_rest_world.z / max(rest["Pelvis"][1].y, 0.001)
+        first = C @ _m(frames[0]["Pelvis"])[1]
+        last = C @ _m(frames[-1]["Pelvis"])[1]
+        action = bpy.data.actions.new(clip)
+        action.use_fake_user = True
+        rig.animation_data_create()
+        rig.animation_data.action = action
+        for pb in rig.pose.bones:
+            pb.rotation_mode = 'QUATERNION'
+        prev_q = {}
+        for fi, frame in enumerate(frames):
+            pose = {}
+            for bone in order:
+                short = bone.name.split(":", 1)[-1]
+                src = tgt_of[short]
+                rest_local = bone.matrix_local
+                parent = bone.parent
+                if parent is not None and parent.name in pose:
+                    base = pose[parent.name] @ parent.matrix_local.inverted() @ rest_local
+                else:
+                    base = rest_local.copy()
+                rot_now, pos_now = _m(frame[src])
+                if src in AIM_CHILD and AIM_CHILD[src] in frame:
+                    child_pos = _m(frame[AIM_CHILD[src]])[1]
+                    direction = arm_rot.transposed() @ (C @ (child_pos - pos_now))
+                    current = base.to_3x3() @ Vector((0, 1, 0))
+                    swing = current.rotation_difference(direction.normalized()).to_matrix()
+                    rot = swing @ base.to_3x3()
+                else:
+                    delta = rot_now @ rest[src][0].transposed()
+                    delta_arm = arm_rot.transposed() @ C @ delta @ C.transposed() @ arm_rot
+                    rot = delta_arm @ rest_local.to_3x3()
+                translation = base.translation
+                if short == "Hips":
+                    p = C @ pos_now
+                    t = fi / max(n - 1, 1)
+                    drift = first.lerp(last, t) if clip in LOOP_RETARGET or n > 1 else first
+                    world = Vector((hips_rest_world.x + (p.x - drift.x) * scale,
+                                    hips_rest_world.y + (p.y - drift.y) * scale,
+                                    p.z * scale))
+                    translation = arm_inv @ world
+                matrix = Matrix.Translation(translation) @ rot.to_4x4()
+                pose[bone.name] = matrix
+                basis = base.inverted() @ matrix
+                pb = rig.pose.bones[bone.name]
+                q = basis.to_quaternion()
+                if bone.name in prev_q:
+                    q.make_compatible(prev_q[bone.name])
+                prev_q[bone.name] = q
+                pb.rotation_quaternion = q
+                pb.keyframe_insert("rotation_quaternion", frame=fi + 1)
+                if short == "Hips":
+                    pb.location = basis.translation
+                    pb.keyframe_insert("location", frame=fi + 1)
+        rig.animation_data.action = None
+        for pb in rig.pose.bones:
+            pb.rotation_quaternion = Quaternion()
+            pb.location = Vector()
+        clips.append((clip, action, (1, n)))
+        print("@retargeted", clip, n, "frames")
+    return clips
 
 # file stem -> list of (clip name, optional (first, last) frame range)
 CLIP_NAMES = {
@@ -52,12 +156,20 @@ CLIP_NAMES = {
     "Body_Block": [("block", None)],
     "Reaction": [("hit_unarmed", None)],
     "Dying": [("death", None)],
+    # Combat pack (24 fps performances; frame ranges are in 30 fps scene frames)
+    "FightingIdle_mixamo": [("fight_idle", (31, 91))],
+    "Boxing_mixamo": [("boxing", (16, 106))],
+    "BigFrontKick_mixamo": [("kick_front", (82, 148))],
+    "RoundHouseKick_mixamo": [("kick_round", (199, 268))],
+    "KnockOut_Loser_mixamo": [("ko_loser", (316, 406))],
+    "KnockOut_Winner_mixamo": [("ko_winner", (481, 601))],
 }
 IN_PLACE = {"walk", "walk_back", "run", "run_back", "strafe_left", "strafe_right",
             "strafe_left_run", "strafe_right_run", "turn_left", "turn_right", "throw_grenade", "hit",
             "walk_back_unarmed", "strafe_left_unarmed", "strafe_right_unarmed", "walk_start", "walk_stop",
             "idle_unarmed", "sprint_start", "punch_1", "punch_2", "punch_3", "punch_heavy", "flying_kick",
-            "block", "hit_unarmed", "jump_big", "fall", "jump_unarmed"}
+            "block", "hit_unarmed", "jump_big", "fall", "jump_unarmed",
+            "fight_idle", "boxing", "kick_front", "kick_round", "ko_loser", "ko_winner"}
 FPS = 30.0
 
 
@@ -98,7 +210,7 @@ def clean_npc(rig):
             bpy.data.objects.remove(obj, do_unlink=True)
 
 
-def main(char_path, out_path, anim_dirs, npc):
+def main(char_path, out_path, anim_dirs, npc, retarget_json=None):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.render.fps = int(FPS)
     bpy.ops.import_scene.fbx(filepath=char_path)
@@ -111,6 +223,9 @@ def main(char_path, out_path, anim_dirs, npc):
 
     clips = []   # (name, action, frame range)
     speeds = {}
+    if retarget_json:
+        clips += retarget_clips(rig, prefix, retarget_json)
+    have = {c[0] for c in clips}
     files = []
     for directory in anim_dirs:
         files += [os.path.join(directory, f) for f in sorted(os.listdir(directory)) if f.lower().endswith(".fbx")]
@@ -119,13 +234,43 @@ def main(char_path, out_path, anim_dirs, npc):
         if key not in CLIP_NAMES:
             continue
         for clip, frame_range in CLIP_NAMES[key]:
+            if clip in have:
+                continue   # a retargeted clip of the same name wins
             before = set(bpy.data.objects)
             bpy.ops.import_scene.fbx(filepath=path)
             new_objects = [o for o in bpy.data.objects if o not in before]
             anim_rig = next(o for o in new_objects if o.type == 'ARMATURE')
             action = anim_rig.animation_data.action
+            # The importer switches the scene to the file's frame rate (24 fps for
+            # some packs). Rescale keys to 30 fps so every clip times correctly.
+            scene = bpy.context.scene
+            file_fps = scene.render.fps / scene.render.fps_base
+            if abs(file_fps - FPS) > 0.01:
+                k = FPS / file_fps
+                for fc in fcurves(action):
+                    for key in fc.keyframe_points:
+                        key.co[0] = 1.0 + (key.co[0] - 1.0) * k
+                        key.handle_left[0] = 1.0 + (key.handle_left[0] - 1.0) * k
+                        key.handle_right[0] = 1.0 + (key.handle_right[0] - 1.0) * k
+                    fc.update()
+            scene.render.fps = int(FPS)
+            scene.render.fps_base = 1.0
             for bone in anim_rig.data.bones:
                 bone.name = prefix + bone.name.split(":", 1)[-1]
+            # Hip translation is stored in the source rig's units; scale it to
+            # this rig (the low-poly NPC's armature uses different units).
+            src_hips = anim_rig.data.bones.get(prefix + "Hips")
+            dst_hips = rig.data.bones.get(prefix + "Hips")
+            unit = 1.0
+            if src_hips and dst_hips and src_hips.head_local.length > 1e-4:
+                unit = dst_hips.head_local.length / src_hips.head_local.length
+            if abs(unit - 1.0) > 0.02:
+                for fc in fcurves(action):
+                    if fc.data_path.endswith('"].location'):
+                        for key in fc.keyframe_points:
+                            key.co[1] *= unit
+                            key.handle_left[1] *= unit
+                            key.handle_right[1] *= unit
             action.name = clip
             action.use_fake_user = True
             start, end = frame_range if frame_range else action.frame_range
@@ -158,6 +303,8 @@ def main(char_path, out_path, anim_dirs, npc):
         strip.action_frame_end = end
         track.mute = True
     rig.animation_data.action = None
+    bpy.context.scene.render.fps = int(FPS)
+    bpy.context.scene.render.fps_base = 1.0
 
     bpy.ops.export_scene.gltf(
         filepath=out_path, export_format='GLB', export_animations=True,
@@ -172,4 +319,5 @@ def main(char_path, out_path, anim_dirs, npc):
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    main(args[0], args[1], args[2:], "--npc" in sys.argv)
+    retarget = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--retarget=")), None)
+    main(args[0], args[1], args[2:], "--npc" in sys.argv, retarget)

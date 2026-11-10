@@ -40,7 +40,6 @@ var render_scale: float = 0.85
 var shadows_enabled: bool = true
 var view_distance: float = 350.0
 var fps_cap: int = 30
-var motion_blur: bool = true
 var day_length_minutes: float = 16.0
 
 # --- sound (0..1)
@@ -58,7 +57,6 @@ func _ready() -> void:
 		money = config.get_value("profile", "money", money)
 		owned_weapons = config.get_value("profile", "owned_weapons", owned_weapons)
 		equipped_weapon = config.get_value("profile", "equipped_weapon", equipped_weapon)
-		motion_blur = config.get_value("graphics", "motion_blur", motion_blur)
 		day_length_minutes = config.get_value("graphics", "day_length", day_length_minutes)
 		camera_mode = config.get_value("camera", "mode", camera_mode)
 		look_sensitivity = config.get_value("camera", "look_sensitivity", look_sensitivity)
@@ -86,7 +84,6 @@ func set_quality(level: int) -> void:
 			render_scale = 0.7
 			shadows_enabled = false
 			view_distance = 220.0
-			motion_blur = false
 		QUALITY_MEDIUM:
 			render_scale = 0.85
 			shadows_enabled = true
@@ -181,7 +178,6 @@ func save() -> void:
 	config.set_value("profile", "money", money)
 	config.set_value("profile", "owned_weapons", owned_weapons)
 	config.set_value("profile", "equipped_weapon", equipped_weapon)
-	config.set_value("graphics", "motion_blur", motion_blur)
 	config.set_value("graphics", "day_length", day_length_minutes)
 	config.set_value("camera", "mode", camera_mode)
 	config.set_value("camera", "look_sensitivity", look_sensitivity)

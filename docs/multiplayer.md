@@ -17,8 +17,9 @@ Uses Godot's built-in ENet on UDP port **7777**, up to 12 players.
 | **Battle Royale** | Random: harbour, suburb, forest or highway | Last alive | Zone shrinks in phases (minimap ring); outside it you take damage |
 | **Street Race** | Start grid; route randomly city→highway→forest→suburb or reverse | First across the last checkpoint | Locked in an S-class car; **NADE** lobs a grenade behind you; a hit slows the car (power and top speed) for 2.5 s. Race-only cars slot into `VehicleCatalog` |
 | **Robbers vs Police** | Robbers at the bank, police at the precinct | Robbers: any robber reaches the extraction zone (random region). Police: all robbers down, or the 7-minute clock runs out | Teams split at random by the host. Rifle, grenades and surge for both sides. No friendly fire. Robbers don't respawn; police do |
+| **Clean Hands** | A ring (24 m) in a random region, same on every device | First to 10 knock-outs, or most KOs after 5 minutes | Fists only (no guns). Landing punches fills the surge meter (+12 a hit, +25 a finisher, +20 a KO); **SURGE** only fires when it's full. KO'd players get back up after 3 s elsewhere in the ring. Leaving the ring hurts. Solo practice: 5 brawler bots |
 
-Winners earn money ($1000 heist, $800 battle royale, $700 race). Losers
+Winners earn money ($1000 heist, $800 battle royale, $700 race, $600 Clean Hands). Losers
 get a little. Money is saved for the **gun shop** (next milestone).
 
 ## How it's built

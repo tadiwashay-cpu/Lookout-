@@ -77,9 +77,6 @@ func _ready() -> void:
 	day_night.nature = nature
 	add_child(day_night)
 	day_night.setup()
-	var blur := MotionBlur.new()
-	blur.speed_source = func() -> float: return player.current_vehicle.linear_velocity.length() if player.current_vehicle else 0.0
-	add_child(blur)
 	_start_mode()
 	if Session.networked:
 		_setup_network()
@@ -480,6 +477,8 @@ func _spawn_player() -> void:
 	if Session.mode == Session.MODE_BATTLE_ROYALE:
 		var region := Session.spawn_region_for(Session.my_id())
 		spawn = random_point_in(region, Session.match_rng(Session.my_id()))
+	elif Session.mode == Session.MODE_CLEAN_HANDS:
+		spawn = CleanHandsMode.spawn_point_for(self, Session.my_id())
 	elif Session.mode == Session.MODE_HEIST:
 		if Session.team_of(Session.my_id()) == "police":
 			spawn = precinct_position + Vector3(Session.match_rng(Session.my_id()).randf_range(-6, 6), 0.3, -2.0)
@@ -520,6 +519,8 @@ func _start_mode() -> void:
 		mode = StreetRaceMode.new()
 	elif Session.mode == Session.MODE_HEIST:
 		mode = HeistMode.new()
+	elif Session.mode == Session.MODE_CLEAN_HANDS:
+		mode = CleanHandsMode.new()
 	else:
 		mode = StoryMode.new()
 	mode.name = "Mode"

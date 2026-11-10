@@ -17,8 +17,8 @@ var _start_button: Button
 var _status: Label
 var _money: Label
 
-## Battle Royale, Street Race, Robbers vs Police (see Session.MODE_*).
-const MP_MODES := [1, 2, 3]
+## Battle Royale, Street Race, Robbers vs Police, Clean Hands (see Session.MODE_*).
+const MP_MODES := [1, 2, 3, 4]
 
 
 func _ready() -> void:

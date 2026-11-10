@@ -20,6 +20,18 @@ terms. Converted with `tools/convert_mixamo.py`: one GLB per character
 with every clip, root motion removed.
 Files: `assets/models/characters/*.glb`, portraits in `assets/ui/portraits/`.
 
+**Combat pack** (`Combat.zip`, Mixamo clips): fighting idle, boxing,
+front kick, roundhouse kick, KO fall and KO win. Trimmed to the moves
+and converted at 30 fps.
+
+**Third Person Shooter Animation Sets** by ZenXChaos
+(github.com/ZenXChaos/ThirdPersonShooter-AnimationSets, made for Unity).
+Clips used: unarmed idle, walk, run and sprint, start and stop steps,
+falling, death, and the pistol and shotgun sets. They were read from
+the FBX 6 files with `tools/extract_fbx6_anim.py` (ufbx) and retargeted
+onto the Mixamo skeleton with `tools/convert_mixamo.py --retarget`.
+⚠️ Check the repo's licence terms before release.
+
 ### NPCs
 **Rigged Low Poly Man** (Mixamo skeleton). Used for goons, pedestrians,
 cops and bots, tinted per role. ⚠️ Source and licence to be filled in.

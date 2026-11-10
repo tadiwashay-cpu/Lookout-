@@ -56,6 +56,8 @@ var _entered_frame := -1
 var _own_lights: MeshInstance3D
 var _lights_material: StandardMaterial3D
 var siren_on := false
+var _skid_last: Dictionary = {}   # rear wheel -> last contact point while skidding
+var _skids: SkidMarks
 
 const _PAINT_SHADER := preload("res://assets/materials/shaders/car_paint.gdshader")
 
@@ -450,9 +452,34 @@ func _drive(delta: float, throttle: float, reverse: float, steer_input: float, h
 	_steer = move_toward(_steer, steer_input * max_steer, 2.4 * delta)
 	for wheel in _front_wheels:
 		wheel.steering = _steer
+	_lay_skid_marks(speed, handbrake)
 	if ai_enabled and is_police and siren_on:
 		_siren_time += delta
 		_flash_lights()
+
+
+## Rubber on the road when the rear steps out, the handbrake locks, or the
+## tyres lose grip (Godot's skid info drops towards 0 as a wheel slides).
+func _lay_skid_marks(speed: float, handbrake: bool) -> void:
+	var lateral := absf(linear_velocity.dot(global_basis.x))
+	var car_skidding := absf(speed) > 4.0 and (handbrake or lateral > 2.6)
+	for wheel in _rear_wheels:
+		var skidding := car_skidding or (absf(speed) > 6.0 and wheel.get_skidinfo() < 0.35)
+		if not skidding or not wheel.is_in_contact():
+			_skid_last.erase(wheel)
+			continue
+		var point := wheel.get_contact_point()
+		if not _skid_last.has(wheel):
+			_skid_last[wheel] = point
+			continue
+		var last: Vector3 = _skid_last[wheel]
+		if last.distance_squared_to(point) < 0.16:
+			continue   # ~40 cm segments keep the buffer long-lived
+		if _skids == null or not is_instance_valid(_skids):
+			_skids = SkidMarks.instance(get_tree())
+		if _skids:
+			_skids.add_segment(last, point, wheel.get_contact_normal(), clampf(lateral / 6.0 + (0.5 if handbrake else 0.3), 0.3, 1.0))
+		_skid_last[wheel] = point
 
 
 func _process(delta: float) -> void:
