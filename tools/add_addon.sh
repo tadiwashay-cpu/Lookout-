@@ -39,6 +39,14 @@ else
 fi
 COMMIT="$(git -C "$TMP/src" rev-parse --short HEAD)"
 
+# Some add-ons (e.g. GPUTrail) keep plugin.cfg at the repo root: install the
+# whole repo as addons/<addon_folder>.
+if [ ! -d "$TMP/src/addons" ] && [ -f "$TMP/src/plugin.cfg" ] && [ -n "$FOLDER" ]; then
+  mkdir -p "$TMP/wrap/addons"
+  rm -rf "$TMP/src/.git"
+  mv "$TMP/src" "$TMP/wrap/addons/$FOLDER"
+  mv "$TMP/wrap" "$TMP/src"
+fi
 [ -d "$TMP/src/addons" ] || { echo "No addons/ folder in $REPO"; exit 1; }
 if [ -n "$FOLDER" ]; then
   [ -d "$TMP/src/addons/$FOLDER" ] || { echo "addons/$FOLDER not found. Available:"; ls "$TMP/src/addons"; exit 1; }
@@ -52,7 +60,7 @@ if grep -rqs --include='*.gdextension' . "$TMP/src/addons"; then
 fi
 
 LICENSE_NAME="see repo"
-for f in LICENSE LICENSE.md LICENSE.txt; do
+for f in LICENSE LICENSE.md LICENSE.txt addons/$FOLDER/LICENSE addons/$FOLDER/LICENSE.md; do
   if [ -f "$TMP/src/$f" ]; then LICENSE_NAME="$(head -1 "$TMP/src/$f" | sed 's/^#* *//')"; break; fi
 done
 

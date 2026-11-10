@@ -20,6 +20,19 @@ const CHARACTERS := {
 ## NPCs, goons, cops and bots (not selectable).
 const NPC_SCENE := "res://assets/models/characters/npc_man.glb"
 
+## Quaternius city characters (CC0). Each group shares one skeleton; the
+## "_casual" file of each group carries the clips for the whole group.
+const CIVILIAN_DIR := "res://assets/models/characters/civilians/"
+const CIVILIANS_MEN := ["civ_m_casual", "civ_m_casual2", "civ_m_suit", "civ_m_worker", "civ_m_punk", "civ_m_beach", "civ_m_farmer", "civ_m_adventurer"]
+const CIVILIANS_WOMEN := ["civ_f_casual", "civ_f_formal", "civ_f_suit", "civ_f_worker", "civ_f_punk", "civ_f_adventurer"]
+const CIVILIANS_TACTICAL := ["civ_m_swat", "civ_f_soldier"]
+
+
+static func random_civilian(rng: RandomNumberGenerator) -> String:
+	if rng.randf() < 0.45:
+		return CIVILIANS_WOMEN[rng.randi() % CIVILIANS_WOMEN.size()]
+	return CIVILIANS_MEN[rng.randi() % CIVILIANS_MEN.size()]
+
 # --- profile
 var character: String = "x_bot"
 var player_name: String = "Player"
@@ -40,6 +53,8 @@ var render_scale: float = 0.85
 var shadows_enabled: bool = true
 var view_distance: float = 350.0
 var fps_cap: int = 30
+## Performance overlay (Debug Menu add-on): 0 off, 1 FPS only, 2 full graphs.
+var perf_overlay: int = 0
 var day_length_minutes: float = 16.0
 
 # --- sound (0..1)
@@ -68,6 +83,7 @@ func _ready() -> void:
 		shadows_enabled = config.get_value("graphics", "shadows", shadows_enabled)
 		view_distance = config.get_value("graphics", "view_distance", view_distance)
 		fps_cap = config.get_value("graphics", "fps_cap", fps_cap)
+		perf_overlay = config.get_value("graphics", "perf_overlay", perf_overlay)
 		master_volume = config.get_value("sound", "master", master_volume)
 		music_volume = config.get_value("sound", "music", music_volume)
 		sfx_volume = config.get_value("sound", "sfx", sfx_volume)
@@ -98,6 +114,7 @@ func set_quality(level: int) -> void:
 
 func apply_all() -> void:
 	Engine.max_fps = fps_cap
+	_apply_perf_overlay.call_deferred()   # the DebugMenu autoload loads after this one
 	var viewport := get_tree().root
 	viewport.scaling_3d_scale = render_scale
 	viewport.msaa_3d = Viewport.MSAA_DISABLED if quality == QUALITY_LOW else Viewport.MSAA_2X
@@ -112,6 +129,12 @@ func _ensure_audio_buses() -> void:
 			var index := AudioServer.bus_count - 1
 			AudioServer.set_bus_name(index, bus_name)
 			AudioServer.set_bus_send(index, &"Master")
+
+
+func _apply_perf_overlay() -> void:
+	var overlay := get_node_or_null(^"/root/DebugMenu")
+	if overlay:
+		overlay.set(&"style", clampi(perf_overlay, 0, 2))
 
 
 func _apply_audio() -> void:
@@ -189,6 +212,7 @@ func save() -> void:
 	config.set_value("graphics", "shadows", shadows_enabled)
 	config.set_value("graphics", "view_distance", view_distance)
 	config.set_value("graphics", "fps_cap", fps_cap)
+	config.set_value("graphics", "perf_overlay", perf_overlay)
 	config.set_value("sound", "master", master_volume)
 	config.set_value("sound", "music", music_volume)
 	config.set_value("sound", "sfx", sfx_volume)

@@ -41,8 +41,13 @@ func _ready() -> void:
 	rig = CharacterRig.new()
 	rig.armed = false
 	add_child(rig)
-	rig.setup("npc", _rng.randf_range(1.65, 1.9))
-	rig.tint([SKIN[_rng.randi() % SKIN.size()], CLOTHES[_rng.randi() % CLOTHES.size()]])
+	if _rng.randf() < 0.8:
+		# Quaternius city people (their own outfits, no tint needed).
+		var id := GameSettings.random_civilian(_rng)
+		rig.setup(id, _rng.randf_range(1.62, 1.74) if id.begins_with("civ_f") else _rng.randf_range(1.72, 1.88))
+	else:
+		rig.setup("npc", _rng.randf_range(1.65, 1.9))
+		rig.tint([SKIN[_rng.randi() % SKIN.size()], CLOTHES[_rng.randi() % CLOTHES.size()]])
 	_new_goal()
 	WantedSystem.crime_reported.connect(_on_crime)
 

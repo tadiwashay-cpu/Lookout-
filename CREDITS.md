@@ -32,6 +32,18 @@ the FBX 6 files with `tools/extract_fbx6_anim.py` (ufbx) and retargeted
 onto the Mixamo skeleton with `tools/convert_mixamo.py --retarget`.
 ⚠️ Check the repo's licence terms before release.
 
+### City people (pedestrians, bots, SWAT)
+**Ultimate Modular Men** and **Ultimate Modular Women** by **Quaternius**
+(quaternius.com), **CC0 1.0** (public domain). 14 city outfits plus the
+SWAT and soldier models. They were converted with
+`tools/retarget_quaternius.py`: bones renamed to Mixamo names and our 53
+clips retargeted onto them.
+Files: `assets/models/characters/civilians/` (licence file included).
+
+### Add-ons
+See `addons/ADDONS.md`: Debug Menu, Phantom Camera, GPUTrail, Road
+Generator and netfox, all MIT.
+
 ### NPCs
 **Rigged Low Poly Man** (Mixamo skeleton). Used for goons, pedestrians,
 cops and bots, tinted per role. ⚠️ Source and licence to be filled in.

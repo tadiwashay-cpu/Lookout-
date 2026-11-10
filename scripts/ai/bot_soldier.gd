@@ -28,6 +28,8 @@ var damage_scale := 0.7           # bots hit softer than players
 var max_health := 100.0
 var melee_only := false           # cops at 1 star try to tackle, not shoot
 var melee_damage := 12.0
+## Character model: "" picks one (police -> SWAT/soldier, others -> city people).
+var model_id := ""
 var _swing_id := 0
 
 var health: HealthComponent
@@ -68,8 +70,14 @@ func _ready() -> void:
 	rig = CharacterRig.new()
 	add_child(rig)
 	rig.armed = not melee_only
-	rig.setup("npc")
-	rig.tint(tint_colors)
+	if model_id == "":
+		if team == "police":
+			model_id = GameSettings.CIVILIANS_TACTICAL[_rng.randi() % GameSettings.CIVILIANS_TACTICAL.size()]
+		else:
+			model_id = GameSettings.random_civilian(_rng)
+	rig.setup(model_id, 1.68 if model_id.begins_with("civ_f") else 1.8)
+	if model_id == "npc":
+		rig.tint(tint_colors)
 	_weapon = WeaponCatalog.get_data(weapon_id)
 	_ammo = int(_weapon["mag"])
 	if not melee_only:

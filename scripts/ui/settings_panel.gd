@@ -22,6 +22,7 @@ func _ready() -> void:
 	_option(graphics, "Quality", ["Low (best battery)", "Medium", "High"], GameSettings.quality, func(i: int) -> void: GameSettings.set_quality(i))
 	_slider(graphics, "Render scale", 0.5, 1.0, 0.05, GameSettings.render_scale, func(v: float) -> void: GameSettings.render_scale = v)
 	_check(graphics, "Shadows", GameSettings.shadows_enabled, func(on: bool) -> void: GameSettings.shadows_enabled = on)
+	_option(graphics, "Show FPS", ["Off", "FPS", "FPS + graphs"], GameSettings.perf_overlay, func(i: int) -> void: GameSettings.perf_overlay = i)
 	_slider(graphics, "View distance (m)", 150.0, 800.0, 25.0, GameSettings.view_distance, func(v: float) -> void: GameSettings.view_distance = v)
 	_option(graphics, "Frame rate", ["30 FPS", "60 FPS"], 1 if GameSettings.fps_cap >= 60 else 0, func(i: int) -> void: GameSettings.fps_cap = 60 if i == 1 else 30)
 	_slider(graphics, "Day length (minutes)", 4.0, 60.0, 1.0, GameSettings.day_length_minutes, func(v: float) -> void: GameSettings.day_length_minutes = v)

@@ -61,9 +61,31 @@ func _ready() -> void:
 	process_priority = 100
 
 
+## Shared clip libraries for the civilian groups (loaded once, reused by
+## every civilian of that group: much less memory than a copy per model).
+static var _shared_clips: Dictionary = {}
+
+
+static func _civilian_clips(group: String) -> AnimationLibrary:
+	if _shared_clips.has(group):
+		return _shared_clips[group]
+	var scene := load(GameSettings.CIVILIAN_DIR + group + "_casual.glb") as PackedScene
+	var library: AnimationLibrary = null
+	if scene:
+		var carrier := scene.instantiate()
+		var player := carrier.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if player and player.has_animation_library(&""):
+			library = player.get_animation_library(&"")
+		carrier.free()
+	_shared_clips[group] = library
+	return library
+
+
 func setup(character_id: String, height: float = 1.8) -> void:
 	var path := GameSettings.NPC_SCENE
-	if character_id != "npc":
+	if character_id.begins_with("civ_"):
+		path = GameSettings.CIVILIAN_DIR + character_id + ".glb"
+	elif character_id != "npc":
 		var info: Dictionary = GameSettings.CHARACTERS.get(character_id, GameSettings.CHARACTERS["x_bot"])
 		path = info["scene"]
 	_model_key = path
@@ -76,6 +98,15 @@ func setup(character_id: String, height: float = 1.8) -> void:
 	_fit_height(model, height)
 
 	var players := model.find_children("*", "AnimationPlayer", true, false)
+	if players.is_empty() and character_id.begins_with("civ_"):
+		# Mesh-only civilian: borrow its group's clips.
+		var library := _civilian_clips(character_id.substr(0, 5))
+		if library:
+			var player := AnimationPlayer.new()
+			player.name = "AnimationPlayer"
+			model.add_child(player)
+			player.add_animation_library(&"", library)
+			players.append(player)
 	if not players.is_empty():
 		anim = players[0] as AnimationPlayer
 		for clip in LOOPING:

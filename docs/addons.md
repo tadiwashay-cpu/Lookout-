@@ -35,6 +35,30 @@ You don't need to install anything in the editor yourself.
 - **Licence:** only MIT, Apache, CC0 or similar. Check `ADDONS.md`
   before release.
 
+## Installed
+- **Debug Menu**: Settings → Graphics → **Show FPS** (Off / FPS / FPS +
+  graphs). Your tablet has no F3 key, so use this.
+- **GPUTrail**: red tail-light streaks behind the car you drive above
+  ~80 km/h. Off on Low quality.
+- **Phantom Camera**: installed and enabled. It will be used for
+  cutscenes and finisher cams. The player and car cameras stay as they
+  are for now.
+- **netfox** (+ netfox.internals): installed and enabled. Its network
+  clock starts on its own when a Wi-Fi match starts. Moving the player
+  sync onto it (smoother remote players) is the next multiplayer step.
+- **Road Generator**: installed for building roads in the editor. The
+  current roads are generated in code; replacing them is a separate job.
+
+## Art packs
+- **Quaternius** Ultimate Modular Men and Women (CC0): 16 characters in
+  `assets/models/characters/civilians/`. Re-run
+  `tools/retarget_quaternius.py` (see the file header) to add more from
+  the pack's "Humanoid Rig" folders.
+- **Poly Haven**: textures and HDRIs (no characters). Reachable from the
+  "Lookout game" cloud environment.
+- **Kenney**: their site blocks automated downloads. Download a pack on
+  your device and send it here.
+
 ## Candidates
 | Add-on | Repo (`owner/repo`) | Folder | Type | What for |
 |---|---|---|---|---|

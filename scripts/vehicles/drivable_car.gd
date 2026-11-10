@@ -58,6 +58,10 @@ var _lights_material: StandardMaterial3D
 var siren_on := false
 var _skid_last: Dictionary = {}   # rear wheel -> last contact point while skidding
 var _skids: SkidMarks
+var _body_aabb := AABB()
+## Red light streaks behind the car you drive (GPUTrail add-on), shown at speed.
+var _light_trails: Array[GPUTrail3D] = []
+const TRAIL_SPEED := 22.0   # m/s (~80 km/h)
 
 const _PAINT_SHADER := preload("res://assets/materials/shaders/car_paint.gdshader")
 
@@ -161,6 +165,7 @@ func _build_from_model() -> void:
 
 func _add_body_collision(body_mesh: MeshInstance3D) -> void:
 	var aabb := body_mesh.get_aabb()
+	_body_aabb = aabb
 	_roof_height = aabb.end.y
 	# Keep the box above the wheels' lower half so the suspension does the work.
 	var bottom := aabb.position.y + aabb.size.y * 0.22
@@ -260,6 +265,7 @@ func enter(player: PlayerController) -> void:
 	add_child(_camera)
 	_camera.global_position = global_position - global_basis.z * 6.0 + Vector3.UP * 2.5
 	_camera.make_current()
+	_add_light_trails()
 	player.start_driving(self)
 	driver_entered.emit(player)
 
@@ -275,6 +281,10 @@ func exit() -> void:
 	if _camera:
 		_camera.queue_free()
 		_camera = null
+	for trail in _light_trails:
+		if is_instance_valid(trail):
+			trail.queue_free()
+	_light_trails.clear()
 	contact_monitor = false
 	set_process(false)
 	player.stop_driving(_find_exit_spot(), atan2(global_basis.z.x, global_basis.z.z) + PI)
@@ -484,7 +494,44 @@ func _lay_skid_marks(speed: float, handbrake: bool) -> void:
 		_skid_last[wheel] = point
 
 
+func _add_light_trails() -> void:
+	if not _light_trails.is_empty() or _body_aabb.size == Vector3.ZERO:
+		return
+	if GameSettings.quality == GameSettings.QUALITY_LOW:
+		return   # save the GPU on low settings
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1.0, 0.12, 0.08, 0.85))
+	ramp.set_color(1, Color(1.0, 0.05, 0.02, 0.0))
+	var ramp_texture := GradientTexture1D.new()
+	ramp_texture.gradient = ramp
+	# The model is rotated 180°, so its +Z end (the rear) sits at car-space -Z.
+	var rear_z := -_body_aabb.end.z + 0.05
+	var height := _body_aabb.position.y + _body_aabb.size.y * 0.45
+	for side in [-1.0, 1.0]:
+		var trail := GPUTrail3D.new()
+		trail.position = Vector3(side * _body_aabb.size.x * 0.36 - _body_aabb.get_center().x, height, rear_z)
+		trail.scale = Vector3(1.0, 0.05, 1.0)   # the ribbon spans local ±Y: ~10 cm tall
+		trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(trail)
+		trail.length = 24
+		trail.color_ramp = ramp_texture
+		trail.visible = false
+		trail.set_process(false)
+		_light_trails.append(trail)
+
+
+func _update_light_trails() -> void:
+	var fast := absf(forward_speed()) > TRAIL_SPEED
+	for trail in _light_trails:
+		if trail.visible != fast:
+			trail.visible = fast
+			trail.set_process(fast)   # idle trails cost nothing
+			if fast:
+				trail.restart()   # don't draw a streak from where it last stopped
+
+
 func _process(delta: float) -> void:
+	_update_light_trails()
 	if _camera == null:
 		return
 	if is_police and driver:

@@ -187,6 +187,7 @@ func _deploy_officers(unit: DrivableCar, heat: int) -> void:
 		officer.melee_only = heat <= 1
 		officer.weapon_id = "glock17" if heat <= 2 else "m4a1"
 		officer.tint_colors = [Color(0.55, 0.42, 0.33), Color(0.07, 0.1, 0.22)]
+		officer.model_id = "npc" if heat <= 2 else ""   # patrol uniform; SWAT from 3 stars
 		officer.accuracy = 0.55 + heat * 0.06
 		officer.position = unit.global_position + unit.global_basis.x * side * 2.2 + Vector3.UP * 0.3
 		world.add_child(officer)

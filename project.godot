@@ -8,6 +8,7 @@ config_version=5
 config/name="Lookout"
 config/description="Open-world anti-hero action game for Android."
 run/main_scene="res://scenes/ui/main_menu.tscn"
+config/version="0.5.0"
 config/features=PackedStringArray("4.4", "Mobile")
 
 [autoload]
@@ -17,6 +18,20 @@ GameSettings="*res://scripts/autoloads/game_settings.gd"
 WantedSystem="*res://scripts/autoloads/wanted_system.gd"
 Session="*res://scripts/autoloads/session.gd"
 Net="*res://scripts/autoloads/network.gd"
+DebugMenu="*res://addons/debug_menu/debug_menu.tscn"
+PhantomCameraManager="*res://addons/phantom_camera/scripts/managers/phantom_camera_manager.gd"
+NetworkTime="*res://addons/netfox/network-time.gd"
+NetworkTimeSynchronizer="*res://addons/netfox/network-time-synchronizer.gd"
+NetworkRollback="*res://addons/netfox/rollback/network-rollback.gd"
+NetworkEvents="*res://addons/netfox/network-events.gd"
+NetworkPerformance="*res://addons/netfox/network-performance.gd"
+RollbackSimulationServer="*res://addons/netfox/servers/rollback-simulation-server.gd"
+NetworkHistoryServer="*res://addons/netfox/servers/network-history-server.gd"
+NetworkSynchronizationServer="*res://addons/netfox/servers/network-synchronization-server.gd"
+NetworkIdentityServer="*res://addons/netfox/servers/network-identity-server.gd"
+NetworkCommandServer="*res://addons/netfox/servers/network-command-server.gd"
+RollbackLivenessServer="*res://addons/netfox/servers/rollback-liveness-server.gd"
+InterpolationServer="*res://addons/netfox/servers/interpolation-server.gd"
 
 [display]
 
@@ -49,3 +64,7 @@ renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=1
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/debug_menu/plugin.cfg", "res://addons/phantom_camera/plugin.cfg", "res://addons/GPUTrail/plugin.cfg", "res://addons/road-generator/plugin.cfg", "res://addons/netfox.internals/plugin.cfg", "res://addons/netfox/plugin.cfg")
