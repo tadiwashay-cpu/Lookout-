@@ -42,6 +42,15 @@ func report_crime(severity: float, at: Vector3, max_stars: int = MAX_STARS) -> v
 	_refresh_stars()
 
 
+func is_seen() -> bool:
+	return _seen_by_police
+
+
+## 0..1 while slipping away: fills during the delay before heat starts to drop.
+func evade_progress() -> float:
+	return clampf(_time_since_crime / DECAY_DELAY, 0.0, 1.0)
+
+
 func set_seen_by_police(seen: bool) -> void:
 	_seen_by_police = seen
 	if seen:

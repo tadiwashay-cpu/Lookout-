@@ -16,7 +16,8 @@ var _speed: Label
 var _ammo: Label
 var _gear: Label
 var _crosshair: Control
-var _wanted: WantedStars
+var _nfs: NfsHud
+var _full_map: FullMap
 var _pause_panel: PanelContainer
 var _settings: SettingsPanel
 var _results: PanelContainer
@@ -40,6 +41,13 @@ func _ready() -> void:
 	_minimap = Minimap.new()
 	_minimap.position = Vector2(20, 20)
 	_root.add_child(_minimap)
+	# Tap the minimap for the full map.
+	var map_button := Button.new()
+	map_button.flat = true
+	map_button.position = _minimap.position
+	map_button.size = Vector2(Minimap.RADIUS_PX * 2.0 + 8.0, Minimap.RADIUS_PX * 2.0 + 8.0)
+	map_button.pressed.connect(func() -> void: _full_map.open())
+	_root.add_child(map_button)
 
 	_health_bar = ProgressBar.new()
 	_health_bar.show_percentage = false
@@ -75,9 +83,8 @@ func _ready() -> void:
 	_surge_bar.visible = false
 	_root.add_child(_surge_bar)
 
-	_wanted = WantedStars.new()
-	_place(_wanted, Control.PRESET_TOP_RIGHT, -420, 18, -120, 74)
-	_root.add_child(_wanted)
+	_nfs = NfsHud.new()
+	_root.add_child(_nfs)
 
 	_ammo = _label(40, HORIZONTAL_ALIGNMENT_RIGHT)
 	_place(_ammo, Control.PRESET_TOP_RIGHT, -420, 80, -40, 130)
@@ -91,6 +98,7 @@ func _ready() -> void:
 	_root.add_child(_status)
 
 	_banner = _label(72, HORIZONTAL_ALIGNMENT_CENTER)
+	_banner.add_theme_font_override("font", UITheme.TITLE_FONT)
 	_place(_banner, Control.PRESET_CENTER, -760, -220, 760, -60)
 	_banner.modulate.a = 0.0
 	_root.add_child(_banner)
@@ -116,21 +124,25 @@ func _ready() -> void:
 	_place(pause, Control.PRESET_TOP_RIGHT, -100, 18, -24, 90)
 	pause.pressed.connect(_open_pause)
 	_root.add_child(pause)
+	_full_map = FullMap.new()
+	_root.add_child(_full_map)
 	_build_pause_menu()
 
 
 func bind_world(world: World) -> void:
 	_world = world
 	_minimap.world = world
+	_full_map.world = world
 
 
 func bind_player(player: PlayerController) -> void:
 	_player = player
 	_minimap.player = player
+	_full_map.player = player
 	player.health.health_changed.connect(_on_health_changed)
 	_on_health_changed(player.health.current, player.health.max_health)
 	player.knocked_out.connect(func() -> void: show_banner("DOWN", 2.0))
-	player.vehicle_changed.connect(func(vehicle: DrivableCar) -> void: _speed.visible = vehicle != null)
+	_nfs.player = player   # the tachometer replaces the plain km/h label
 	player.ammo_changed.connect(func(_a: int, _r: int) -> void: _refresh_weapon())
 	player.loadout_changed.connect(_refresh_weapon)
 	_refresh_weapon()
@@ -138,7 +150,7 @@ func bind_player(player: PlayerController) -> void:
 
 func bind_mode(mode: GameMode) -> void:
 	mode.status_changed.connect(func(text: String) -> void: _status.text = text)
-	_wanted.visible = Session.mode == Session.MODE_STORY
+	pass
 
 
 func _process(_delta: float) -> void:

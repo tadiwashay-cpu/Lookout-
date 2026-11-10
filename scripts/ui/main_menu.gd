@@ -44,6 +44,7 @@ func _ready() -> void:
 	layout.add_child(left)
 	var title := Label.new()
 	title.text = "LOOKOUT"
+	title.add_theme_font_override("font", UITheme.TITLE_FONT)
 	title.add_theme_font_size_override("font_size", 110)
 	title.add_theme_color_override("font_color", Color(0.95, 0.75, 0.42))
 	left.add_child(title)

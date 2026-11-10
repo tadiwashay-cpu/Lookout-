@@ -837,6 +837,7 @@ func _on_died() -> void:
 func _respawn() -> void:
 	last_attacker_peer = 0
 	global_position = spawn_point
+	reset_physics_interpolation()
 	velocity = Vector3.ZERO
 	_model.rotation.x = 0.0
 	rig.play(rig.idle_clip(), 1.0, 0.0)
@@ -894,6 +895,7 @@ func stop_driving(exit_position: Vector3, facing_yaw: float) -> void:
 	current_vehicle = null
 	_left_vehicle_frame = Engine.get_physics_frames()
 	global_position = exit_position
+	reset_physics_interpolation()
 	velocity = Vector3.ZERO
 	visible = true
 	collision_layer = PLAYER_LAYER

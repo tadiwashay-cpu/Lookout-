@@ -58,6 +58,23 @@ var _lights_material: StandardMaterial3D
 var siren_on := false
 var _skid_last: Dictionary = {}   # rear wheel -> last contact point while skidding
 var _skids: SkidMarks
+## Arcade handling: grip assist when driving straight, a held drift state
+## after a handbrake flick (rear steps out, momentum is kept).
+var drifting := false
+const GRIP_ASSIST := 3.2      # how hard sideways sliding is cancelled (1/s)
+const DRIFT_GRIP := 0.55      # assist left while drifting
+const DRIFT_YAW_MAX := 2.3    # rad/s spin cap so you don't loop
+enum CamView { CLOSE, FAR, FREE, HOOD, INTERIOR }
+## Remembered between cars. INTERIOR only for cars whose catalog entry has "interior".
+static var cam_view: CamView = CamView.CLOSE
+## 0 = day, 1 = night. Set by DayNight; cars switch their lights from it.
+static var night := 0.0
+const BLUR_FROM := 41.7   # m/s = 150 km/h
+var _lamp_materials: Array[StandardMaterial3D] = []
+var _lamps_on := -1.0
+var _headlights: Array[SpotLight3D] = []
+var _blur_layer: CanvasLayer
+var _blur_material: ShaderMaterial
 var _body_aabb := AABB()
 ## Red light streaks behind the car you drive (GPUTrail add-on), shown at speed.
 var _light_trails: Array[GPUTrail3D] = []
@@ -75,7 +92,7 @@ func _ready() -> void:
 	collision_layer = VEHICLE_LAYER
 	collision_mask = WORLD_LAYER | PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER | 16   # 16 = pedestrians
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector3(0.0, 0.28, 0.0)   # low: resists rolling in sharp turns
+	center_of_mass = Vector3(0.0, 0.12, 0.0)   # very low: planted, resists rolling
 	contact_monitor = false   # only while driven (mobile perf)
 	max_contacts_reported = 4
 	body_entered.connect(_on_body_entered)
@@ -88,6 +105,8 @@ func _ready() -> void:
 		_apply_paint(paint)
 	if is_police and _own_lights == null:
 		_build_light_bar()
+	elif _own_lights and not is_police:
+		_setup_head_tail_lights()
 	elif _own_lights:
 		_lights_material = StandardMaterial3D.new()
 		_lights_material.emission_enabled = true
@@ -265,7 +284,10 @@ func enter(player: PlayerController) -> void:
 	add_child(_camera)
 	_camera.global_position = global_position - global_basis.z * 6.0 + Vector3.UP * 2.5
 	_camera.make_current()
+	if cam_view == CamView.INTERIOR and not bool(data.get("interior", false)):
+		cam_view = CamView.HOOD
 	_add_light_trails()
+	_add_headlights()
 	player.start_driving(self)
 	driver_entered.emit(player)
 
@@ -285,6 +307,12 @@ func exit() -> void:
 		if is_instance_valid(trail):
 			trail.queue_free()
 	_light_trails.clear()
+	for lamp in _headlights:
+		lamp.queue_free()
+	_headlights.clear()
+	if _blur_layer:
+		_blur_layer.queue_free()
+		_blur_layer = null
 	contact_monitor = false
 	set_process(false)
 	player.stop_driving(_find_exit_spot(), atan2(global_basis.z.x, global_basis.z.z) + PI)
@@ -354,6 +382,8 @@ func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool
 
 func _physics_process(delta: float) -> void:
 	_slow_timer = maxf(_slow_timer - delta, 0.0)
+	if not _lamp_materials.is_empty() or not _headlights.is_empty():
+		_update_lamps()
 	_stabilize(delta)
 	if driver == null and not ai_enabled:
 		return
@@ -363,7 +393,7 @@ func _physics_process(delta: float) -> void:
 	driver.global_position = global_position + Vector3.UP * 0.5
 
 	if Input.is_action_just_pressed(&"toggle_camera"):
-		GameSettings.toggle_camera_mode()
+		_next_cam_view()
 
 	# Same press that got us in must not also get us out.
 	if Input.is_action_just_pressed(&"interact") and Engine.get_physics_frames() != _entered_frame and not locked:
@@ -377,6 +407,79 @@ func _physics_process(delta: float) -> void:
 		Input.get_axis(&"move_right", &"move_left"), Input.is_action_pressed(&"jump"))
 	if is_police:
 		_siren_time += delta
+
+
+## Civilian cars: keep each light's own colour (white heads, red tails) and
+## make it glow at night while the car is driven or AI-driven.
+func _setup_head_tail_lights() -> void:
+	for s in _own_lights.mesh.get_surface_count():
+		var base := _own_lights.mesh.surface_get_material(s) as StandardMaterial3D
+		var lamp := (base.duplicate() if base else StandardMaterial3D.new()) as StandardMaterial3D
+		lamp.emission_enabled = true
+		lamp.emission = lamp.albedo_color
+		lamp.emission_energy_multiplier = 0.0
+		_own_lights.set_surface_override_material(s, lamp)
+		_lamp_materials.append(lamp)
+
+
+func _update_lamps() -> void:
+	var on := night if (driver or ai_enabled) else 0.0
+	if absf(on - _lamps_on) < 0.05:
+		return
+	_lamps_on = on
+	for lamp in _lamp_materials:
+		lamp.emission_energy_multiplier = on * 4.0
+	for spot in _headlights:
+		spot.visible = on > 0.3
+
+
+func _add_headlights() -> void:
+	if not _headlights.is_empty() or _body_aabb.size == Vector3.ZERO:
+		return
+	var front_z := -_body_aabb.position.z   # model is rotated 180°: its -Z end is our +Z front
+	for side in [-1.0, 1.0]:
+		var spot := SpotLight3D.new()
+		spot.position = Vector3(side * _body_aabb.size.x * 0.32, _body_aabb.position.y + _body_aabb.size.y * 0.4, front_z)
+		spot.rotation = Vector3(deg_to_rad(-6.0), PI, 0.0)   # SpotLight shines along -Z; flip to face +Z
+		spot.spot_range = 38.0
+		spot.spot_angle = 32.0
+		spot.light_energy = 3.0
+		spot.light_color = Color(1.0, 0.94, 0.82)
+		spot.shadow_enabled = false
+		spot.visible = false
+		add_child(spot)
+		_headlights.append(spot)
+	_lamps_on = -1.0
+
+
+## Motion blur round the screen edges above 150 km/h (driven car only).
+func _update_speed_fx(speed: float) -> void:
+	var amount := clampf((speed - BLUR_FROM) / 14.0, 0.0, 1.0)
+	if GameSettings.quality == GameSettings.QUALITY_LOW:
+		amount = 0.0
+	if amount <= 0.0:
+		if _blur_layer:
+			_blur_layer.visible = false
+		return
+	if _blur_layer == null:
+		_blur_layer = CanvasLayer.new()
+		_blur_layer.layer = 5   # under the HUD
+		var rect := ColorRect.new()
+		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_blur_material = ShaderMaterial.new()
+		_blur_material.shader = preload("res://assets/materials/shaders/speed_blur.gdshader")
+		rect.material = _blur_material
+		_blur_layer.add_child(rect)
+		add_child(_blur_layer)
+	_blur_layer.visible = true
+	_blur_material.set_shader_parameter(&"amount", amount)
+
+
+func _next_cam_view() -> void:
+	var count := CamView.size() if bool(data.get("interior", false)) else CamView.INTERIOR
+	cam_view = ((int(cam_view) + 1) % count) as CamView
+	_cam_yaw_offset = 0.0
 
 
 ## Anti-roll: keeps cars planted in hard corners (and rights them if they flip).
@@ -395,7 +498,7 @@ func _stabilize(delta: float) -> void:
 	var pitch_rate := angular_velocity.dot(global_basis.x)
 	apply_torque(-global_basis.x * pitch_rate * 1.5 * mass)
 	# Downforce grows with speed
-	apply_central_force(-up * speed * speed * mass * 0.004)
+	apply_central_force(-up * speed * speed * mass * 0.007)
 	# Upside down and stopped: flip back onto the wheels after a moment.
 	if up.dot(Vector3.UP) < 0.35 and speed < 3.0:
 		_upside_down_time += delta
@@ -407,6 +510,7 @@ func _stabilize(delta: float) -> void:
 			global_transform = Transform3D(Basis.looking_at(-heading, Vector3.UP), global_position + Vector3.UP * 1.2)
 			linear_velocity = Vector3.ZERO
 			angular_velocity = Vector3.ZERO
+			reset_physics_interpolation()
 	else:
 		_upside_down_time = 0.0
 
@@ -451,15 +555,38 @@ func _drive(delta: float, throttle: float, reverse: float, steer_input: float, h
 		wheel.engine_force = 0.0
 		wheel.brake = hold_brake if holding else 0.0
 		wheel.wheel_friction_slip = data["grip"]
+	var side := global_basis.x
+	var lateral := linear_velocity.dot(side)
+	# Enter a drift: handbrake flick at speed. Stay in it while sliding.
+	if handbrake and speed > 12.0:
+		drifting = true
+	elif drifting and (absf(lateral) < 1.2 or speed < 6.0):
+		drifting = false
 	if handbrake:
 		for wheel in _rear_wheels:
-			wheel.brake = hold_brake * 1.5
+			wheel.brake = hold_brake * (0.6 if drifting else 1.5)
 			wheel.wheel_friction_slip = float(data["grip"]) * 0.45   # let the rear step out
+	elif drifting:
+		for wheel in _rear_wheels:
+			wheel.wheel_friction_slip = float(data["grip"]) * 0.6
+	if grounded >= 2:
+		# Grip assist: bleed off sideways speed. While drifting, turn part of
+		# it back into forward speed so a slide doesn't kill your momentum.
+		var assist := DRIFT_GRIP if drifting else GRIP_ASSIST
+		apply_central_force(-side * lateral * assist * mass)
+		if drifting:
+			apply_central_force(forward * absf(lateral) * 0.9 * mass * signf(speed))
+			# Steering holds the angle; gas pushes it wider.
+			apply_torque(Vector3.UP * steer_input * (1.6 + throttle * 1.2) * mass)
+		var yaw_rate := angular_velocity.y
+		var cap := DRIFT_YAW_MAX if drifting else 1.6
+		if absf(yaw_rate) > cap:
+			angular_velocity.y = signf(yaw_rate) * cap
 
 	# Less steering lock at speed keeps the car controllable on a touchscreen.
 	var speed_factor := clampf(absf(speed) / top_speed, 0.0, 1.0)
 	var max_steer: float = float(data["steer"]) * lerpf(1.0, 0.35, speed_factor)
-	_steer = move_toward(_steer, steer_input * max_steer, 2.4 * delta)
+	_steer = move_toward(_steer, steer_input * max_steer, 3.6 * delta)
 	for wheel in _front_wheels:
 		wheel.steering = _steer
 	_lay_skid_marks(speed, handbrake)
@@ -472,7 +599,7 @@ func _drive(delta: float, throttle: float, reverse: float, steer_input: float, h
 ## tyres lose grip (Godot's skid info drops towards 0 as a wheel slides).
 func _lay_skid_marks(speed: float, handbrake: bool) -> void:
 	var lateral := absf(linear_velocity.dot(global_basis.x))
-	var car_skidding := absf(speed) > 4.0 and (handbrake or lateral > 2.6)
+	var car_skidding := absf(speed) > 4.0 and (handbrake or drifting or lateral > 2.6)
 	for wheel in _rear_wheels:
 		var skidding := car_skidding or (absf(speed) > 6.0 and wheel.get_skidinfo() < 0.35)
 		if not skidding or not wheel.is_in_contact():
@@ -537,24 +664,31 @@ func _process(delta: float) -> void:
 	if is_police and driver:
 		_flash_lights()
 
-	if GameSettings.camera_mode == GameSettings.FIRST_PERSON:
-		# Driver's seat: left side, eye height.
-		var seat := global_transform * Vector3(0.36, 1.12, 0.1)
-		_camera.global_position = seat
-		_camera.global_basis = global_basis.rotated(global_basis.y, PI + _cam_yaw_offset)
-		_cam_yaw_offset = move_toward(_cam_yaw_offset, 0.0, delta * 0.8)
-		return
-
-	# Chase camera that swings behind the direction of travel.
-	if absf(_cam_yaw_offset) > 0.0:
+	var xf := get_global_transform_interpolated()   # smooth: no physics-tick stutter
+	var speed := linear_velocity.length()
+	_update_speed_fx(speed)
+	match cam_view:
+		CamView.HOOD, CamView.INTERIOR:
+			var seat := Vector3(0.36, 1.12, 0.1) if cam_view == CamView.INTERIOR else Vector3(0.0, _roof_height * 0.82, _body_aabb.end.z * 0.2)
+			_camera.global_position = xf * seat
+			_camera.global_basis = xf.basis.rotated(xf.basis.y, PI + _cam_yaw_offset)
+			_cam_yaw_offset = move_toward(_cam_yaw_offset, 0.0, delta * 0.8)
+			_camera.fov = lerpf(_camera.fov, 78.0 + clampf(speed - 20.0, 0.0, 40.0) * 0.3, clampf(delta * 3.0, 0.0, 1.0))
+			return
+	var free := cam_view == CamView.FREE
+	if not free and absf(_cam_yaw_offset) > 0.0:
 		_cam_yaw_offset = move_toward(_cam_yaw_offset, 0.0, delta * 0.5)
-	var car_yaw := atan2(global_basis.z.x, global_basis.z.z)
+	var car_yaw := atan2(xf.basis.z.x, xf.basis.z.z)
 	var yaw := car_yaw + _cam_yaw_offset
-	var distance := 6.0 + clampf(linear_velocity.length() * 0.06, 0.0, 2.5)
+	var base := 4.6 if cam_view == CamView.CLOSE else 7.5
+	var distance := base + clampf(speed * 0.05, 0.0, 2.2)
+	var pitch := _cam_pitch if free else (0.2 if cam_view == CamView.CLOSE else 0.3)
 	var back := Vector3(sin(yaw), 0.0, cos(yaw))
-	var target := global_position - back * distance * cos(_cam_pitch) + Vector3.UP * (1.2 + distance * sin(_cam_pitch))
-	_camera.global_position = _camera.global_position.lerp(target, clampf(delta * 6.0, 0.0, 1.0))
-	_camera.look_at(global_position + Vector3.UP * 1.1, Vector3.UP)
+	var target := xf.origin - back * distance * cos(pitch) + Vector3.UP * (1.1 + distance * sin(pitch))
+	_camera.global_position = _camera.global_position.lerp(target, clampf(delta * (12.0 if free else 7.0), 0.0, 1.0))
+	_camera.look_at(xf.origin + Vector3.UP * 1.0, Vector3.UP)
+	# Faster feel: widen the view with speed.
+	_camera.fov = lerpf(_camera.fov, 72.0 + clampf(speed - 15.0, 0.0, 45.0) * 0.35, clampf(delta * 3.0, 0.0, 1.0))
 
 
 func _set_light_bar(energy: float) -> void:

@@ -4,6 +4,11 @@ extends RefCounted
 
 static var _theme: Theme
 
+## Your fonts (freeware, NON-COMMERCIAL licence: fine for testing with
+## friends; swap or license them before a paid/ads release).
+const TITLE_FONT := preload("res://assets/fonts/aq_hand_graffiti_bold.otf")   # titles, banners
+const HUD_FONT := preload("res://assets/fonts/mightyspidey.ttf")              # speedo, heat, big numbers
+
 
 static func get_theme() -> Theme:
 	if _theme:
