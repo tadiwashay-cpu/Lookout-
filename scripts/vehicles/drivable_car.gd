@@ -217,6 +217,12 @@ func _apply_paint(color: Color) -> void:
 		var original := body_mesh.mesh.surface_get_material(i) as BaseMaterial3D
 		if original == null or not original.resource_name.begins_with("Body"):
 			continue
+		if original.albedo_texture == null:
+			# Untextured body (procedural supercars): just recolour it, keep the clear coat.
+			var plain := original.duplicate() as BaseMaterial3D
+			plain.albedo_color = color
+			body_mesh.set_surface_override_material(i, plain)
+			continue
 		var paint_material := ShaderMaterial.new()
 		paint_material.shader = _PAINT_SHADER
 		paint_material.set_shader_parameter("albedo_tex", original.albedo_texture)
