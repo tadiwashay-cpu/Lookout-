@@ -58,6 +58,10 @@ var _lights_material: StandardMaterial3D
 var siren_on := false
 var _skid_last: Dictionary = {}   # rear wheel -> last contact point while skidding
 var _skids: SkidMarks
+var wrecked := false
+var _fuse_lit := false
+var _smoke: GPUParticles3D
+var _fire: GPUParticles3D
 ## Arcade handling: grip assist when driving straight, a held drift state
 ## after a handbrake flick (rear steps out, momentum is kept).
 var drifting := false
@@ -263,6 +267,8 @@ func _build_light_bar() -> void:
 # ------------------------------------------------------------------- driving
 
 func can_enter() -> bool:
+	if wrecked or _fuse_lit:
+		return false
 	return driver == null
 
 
@@ -390,9 +396,105 @@ func is_slowed() -> bool:
 
 
 func take_vehicle_damage(amount: float) -> void:
+	if wrecked:
+		return
 	health = maxf(health - amount, 0.0)
-	if health <= 0.0 and driver and not locked:
+	var full: float = data["health"]
+	if health < full * 0.35 and _smoke == null:
+		_smoke = _engine_plume(false)
+	if health < full * 0.12 and _fire == null:
+		_fire = _engine_plume(true)
+	if health <= 0.0 and not _fuse_lit and not locked:
+		_fuse_lit = true
+		if driver:
+			var d := driver
+			exit()
+			d.take_hit(8.0, Vector3.UP * 2.0, self, false)
+		_blow_up_after(2.5)
+
+
+## Smoke (or fire) pouring from the engine bay.
+func _engine_plume(fire: bool) -> GPUParticles3D:
+	var mat := ParticleProcessMaterial.new()
+	mat.direction = Vector3.UP
+	mat.spread = 18.0
+	mat.initial_velocity_min = 1.5
+	mat.initial_velocity_max = 3.0
+	mat.gravity = Vector3(0, 1.2, 0)
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(1.0, 0.75, 0.25, 0.9), Color(0.9, 0.25, 0.05, 0.6), Color(0.1, 0.08, 0.07, 0.0)]) if fire \
+		else PackedColorArray([Color(0.25, 0.25, 0.25, 0.0), Color(0.18, 0.18, 0.18, 0.55), Color(0.3, 0.3, 0.3, 0.0)])
+	g.offsets = PackedFloat32Array([0.0, 0.4, 1.0])
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = g
+	mat.color_ramp = ramp
+	var p := GPUParticles3D.new()
+	p.amount = 18 if fire else 14
+	p.lifetime = 0.8 if fire else 2.2
+	p.process_material = mat
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE * (0.9 if fire else 1.3)
+	quad.material = ExplosionFX._billboard("fire" if fire else "smoke", fire)
+	p.draw_pass_1 = quad
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var front := -_body_aabb.position.z * 0.6 if _body_aabb.size != Vector3.ZERO else 1.2
+	p.position = Vector3(0, _roof_height * 0.7, front)
+	add_child(p)
+	return p
+
+
+func _blow_up_after(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+	if is_inside_tree() and not wrecked:
+		explode()
+
+
+func explode() -> void:
+	wrecked = true
+	remove_from_group(&"vehicles")   # a wreck can't be driven
+	ai_enabled = false
+	siren_on = false
+	if driver:
 		exit()
+	var at := global_position + Vector3.UP * 0.8
+	Effects.explosion(get_tree(), at, 7.0)
+	# Blast damage around the car
+	var sphere := SphereShape3D.new()
+	sphere.radius = 7.0
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = sphere
+	params.transform = Transform3D(Basis(), at)
+	params.collision_mask = PLAYER_LAYER | ENEMY_LAYER | VEHICLE_LAYER | 16
+	params.exclude = [get_rid()]
+	for hit: Dictionary in get_world_3d().direct_space_state.intersect_shape(params, 24):
+		var target = hit.get("collider")
+		if target and target.has_method(&"take_hit") and target != self:
+			var offset: Vector3 = (target as Node3D).global_position - at
+			var falloff := clampf(1.0 - offset.length() / 7.0, 0.0, 1.0)
+			target.take_hit(90.0 * falloff, (offset.normalized() + Vector3.UP * 0.5) * 9.0 * falloff, self, true)
+	# Launch and spin, then leave a burnt shell.
+	apply_central_impulse(Vector3.UP * mass * 7.0 + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * mass * 2.0)
+	apply_torque_impulse(Vector3(randf_range(-1, 1), randf_range(-0.5, 0.5), randf_range(-1, 1)) * mass * 3.0)
+	_char_body()
+	for lamp in _lamp_materials:
+		lamp.emission_energy_multiplier = 0.0
+	_lamp_materials.clear()
+	if _smoke == null:
+		_smoke = _engine_plume(false)
+	await get_tree().create_timer(45.0).timeout
+	if is_inside_tree() and driver == null:
+		queue_free()
+
+
+func _char_body() -> void:
+	var burnt := StandardMaterial3D.new()
+	burnt.albedo_color = Color(0.06, 0.055, 0.05)
+	burnt.roughness = 1.0
+	for node in find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if mesh.mesh:
+			for i in mesh.mesh.get_surface_count():
+				mesh.set_surface_override_material(i, burnt)
 
 
 func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool = false) -> void:
@@ -772,6 +874,8 @@ func _on_body_entered(body: Node) -> void:
 	var impact := linear_velocity.length()
 	if impact > 7.0:
 		Audio.play("crash", global_position, minf(impact * 0.3 - 6.0, 4.0))
+	if impact > 14.0:
+		take_vehicle_damage((impact - 14.0) * 9.0)   # hard crashes wreck cars
 	if impact < 6.0 or not body.has_method(&"take_hit"):
 		return
 	if body is PlayerController:

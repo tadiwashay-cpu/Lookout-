@@ -88,13 +88,18 @@ static func impact(tree: SceneTree, pos: Vector3) -> void:
 
 static func explosion(tree: SceneTree, pos: Vector3, radius: float) -> void:
 	Audio.play("explosion", pos, 4.0)
-	_ring(tree, pos, radius, _blast_mat_get(), 0.35)
+	ExplosionFX.spawn(tree, pos, radius)
 
 
 static func surge(tree: SceneTree, pos: Vector3, radius: float) -> void:
 	Audio.play("surge", pos, 2.0)
+	ExplosionFX.spawn(tree, pos, radius * 0.5, true)
+
+
+## Expanding shockwave sphere (used by the explosion effects).
+static func ring(tree: SceneTree, pos: Vector3, radius: float, energy: bool = false) -> void:
 	_init_materials()
-	_ring(tree, pos, radius, _surge_mat, 0.3)
+	_ring(tree, pos, radius, _surge_mat if energy else _blast_mat, 0.35)
 
 
 static func _blast_mat_get() -> StandardMaterial3D:

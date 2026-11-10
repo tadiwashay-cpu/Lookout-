@@ -499,6 +499,13 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 	rig.play_locomotion(local_right, local_forward)
 
 
+## Screen shake from the world (explosions).
+func add_shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+	if current_vehicle == null:
+		_fov_punch = maxf(_fov_punch, amount * 6.0)
+
+
 ## Close-in fight camera: Clean Hands, or fists out with someone close.
 func _in_brawl() -> bool:
 	return not is_armed() and current_vehicle == null and (Session.mode == Session.MODE_CLEAN_HANDS or rig.fight_ready)
