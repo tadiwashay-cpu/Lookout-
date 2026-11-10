@@ -168,6 +168,7 @@ func _physics_process(delta: float) -> void:
 	elif flat.length() < 0.3 and _fire_cd > 0.0 and not melee_only:
 		rig.play(rig.fire_clip())
 	else:
+		rig.grounded = is_on_floor()
 		rig.play_locomotion(flat.dot(facing * Vector3.RIGHT), flat.dot(facing * Vector3.FORWARD))
 
 

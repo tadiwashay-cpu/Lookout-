@@ -114,6 +114,7 @@ func _physics_process(delta: float) -> void:
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
 	_action_lock = maxf(_action_lock - delta, 0.0)
 	if _action_lock <= 0.0:
+		rig.grounded = is_on_floor()
 		rig.play_locomotion(0.0, flat.length())
 
 

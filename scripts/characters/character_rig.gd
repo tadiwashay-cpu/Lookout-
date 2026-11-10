@@ -50,6 +50,10 @@ var _feet: Array[int] = []
 var _foot_rest_y := 0.0
 var _model_base_y := 0.0
 var _lift := 0.0
+var _sole_height: Array[float] = []
+var _height := 1.8
+## Owners set this: false while jumping/falling so the feet are left alone.
+var grounded := true
 var muzzle: Node3D
 var armed := true:
 	set(value):
@@ -94,6 +98,7 @@ static func _civilian_clips(group: String) -> AnimationLibrary:
 
 
 func setup(character_id: String, height: float = 1.8) -> void:
+	_height = height
 	var path := GameSettings.NPC_SCENE
 	if character_id.begins_with("civ_"):
 		path = GameSettings.CIVILIAN_DIR + character_id + ".glb"
@@ -139,13 +144,20 @@ func setup(character_id: String, height: float = 1.8) -> void:
 				_head = i
 			elif bone.ends_with("LeftFoot") or bone.ends_with("RightFoot"):
 				_feet.append(i)
+				_sole_height.append(0.085)   # ankle joint above the sole (1.8 m person)
+			elif bone.ends_with("LeftToeBase") or bone.ends_with("RightToeBase"):
+				_feet.append(i)
+				_sole_height.append(0.03)    # ball of the foot
 			elif bone.ends_with("LeftHandMiddle1"):
 				_left_finger = i
+	if skeleton and not _feet.is_empty():
+		_fit_by_skeleton(model, height)
 	if skeleton and not _feet.is_empty():
 		_foot_rest_y = INF
 		for foot in _feet:
 			_foot_rest_y = minf(_foot_rest_y, skeleton.get_bone_global_rest(foot).origin.y)
-	_model_base_y = model.position.y
+	if _feet.is_empty():
+		_model_base_y = model.position.y
 	for mesh in model.find_children("*", "MeshInstance3D", true, false):
 		var instance := mesh as MeshInstance3D
 		for s in instance.mesh.get_surface_count():
@@ -198,21 +210,70 @@ func _process(delta: float) -> void:
 		if _head >= 0 and (first_person or _head_hidden):
 			skeleton.set_bone_pose_scale(_head, Vector3.ONE * 0.001 if first_person else Vector3.ONE)
 			_head_hidden = first_person
-		if ground_feet and not _feet.is_empty():
-			_keep_feet_on_ground(delta)
 	_update_weapon()
 
 
+## Runs in the physics step: with physics interpolation on, moving the
+## model in _process makes it jitter (and Godot warns about it).
+func _physics_process(delta: float) -> void:
+	if skeleton and ground_feet and not _feet.is_empty() and is_visible_in_tree():
+		_keep_feet_on_ground(delta)
+
+
+## Size and place the model from its bones (mesh bounds are unreliable on
+## some imports): soles at the floor, head top at `height`.
+func _fit_by_skeleton(model: Node3D, height: float) -> void:
+	var top_bone := -1
+	var head := -1
+	for i in skeleton.get_bone_count():
+		var bn := skeleton.get_bone_name(i)
+		if bn.ends_with("HeadTop_End") or bn.ends_with("Head_end"):
+			top_bone = i
+		elif bn.ends_with("Head"):
+			head = i
+	var rest := func(i: int) -> Vector3: return skeleton.global_transform * skeleton.get_bone_global_rest(i).origin
+	var base_y := global_position.y
+	var s := model.scale.y
+	var y0 := model.position.y
+	var guess := height / 1.8
+	var sole := INF
+	for k in _feet.size():
+		sole = minf(sole, (rest.call(_feet[k]) as Vector3).y - base_y)
+	var top: float
+	if top_bone >= 0:
+		top = (rest.call(top_bone) as Vector3).y - base_y
+	elif head >= 0:
+		top = (rest.call(head) as Vector3).y - base_y + 0.17 * guess
+	else:
+		return
+	# Back to the model's own (unscaled) units, then rescale and re-seat.
+	var l_sole := (sole - y0) / s
+	var l_top := (top - y0) / s
+	var span := l_top - l_sole
+	if span <= 0.01:
+		return
+	var foot_lift := 0.085 * guess   # ankle above the sole
+	var new_s := (height - foot_lift) / span
+	model.scale = Vector3.ONE * new_s
+	model.position.y = foot_lift - l_sole * new_s
+	_model_base_y = model.position.y
+
+
+## Plant the supporting foot exactly on the floor: the lowest sole (foot
+## bone minus its height above the sole) is put at the body's floor level
+## (this node's origin). Works for any model/clip, up or down.
 func _keep_feet_on_ground(delta: float) -> void:
+	var floor_y := global_position.y
+	var sk := skeleton.global_transform
+	var scale := _height / 1.8
 	var lowest := INF
-	for foot in _feet:
-		lowest = minf(lowest, skeleton.get_bone_global_pose(foot).origin.y)
-	# Skeleton space -> how far below its rest height the lowest ankle is.
-	# Positive = feet sank below the floor (lift), negative = feet float
-	# (pull down). Big negatives are jumps/kicks: leave those alone.
-	var sink := (_foot_rest_y - lowest) * skeleton.global_basis.get_scale().y
-	var want := clampf(sink, -0.18, 0.3) if sink > -0.25 else 0.0
-	_lift = lerpf(_lift, want, clampf(delta * 12.0, 0.0, 1.0))
+	for k in _feet.size():
+		var y := (sk * skeleton.get_bone_global_pose(_feet[k]).origin).y - _sole_height[k] * scale
+		lowest = minf(lowest, y)
+	var want := 0.0
+	if grounded and lowest < INF:
+		want = clampf(_lift - (lowest - floor_y), -0.4, 0.4)   # shift so that sole == floor
+	_lift = lerpf(_lift, want, clampf(delta * 15.0, 0.0, 1.0))
 	var holder := get_child(0) as Node3D
 	if holder and holder.get_child_count() > 0:
 		(holder.get_child(0) as Node3D).position.y = _model_base_y + _lift

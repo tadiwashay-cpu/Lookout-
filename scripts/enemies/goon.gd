@@ -112,6 +112,7 @@ func _physics_process(delta: float) -> void:
 	if _state in [State.IDLE, State.CHASE] or (_state == State.RECOVER and _state_time > 0.5):
 		var facing := Basis(Vector3.UP, _model.rotation.y)
 		var flat := Vector3(velocity.x, 0.0, velocity.z)
+		_rig().grounded = is_on_floor()
 		_rig().play_locomotion(flat.dot(facing * Vector3.RIGHT), flat.dot(facing * Vector3.FORWARD))
 	move_and_slide()
 

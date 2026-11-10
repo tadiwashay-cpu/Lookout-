@@ -440,6 +440,7 @@ func _tick_timers(delta: float) -> void:
 
 
 func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
+	rig.grounded = is_on_floor() and _air_time < 0.1
 	# Armed or first person: face where the camera looks (strafe).
 	# Fists: face the way you move.
 	if is_armed() or _camera_mode == GameSettings.FIRST_PERSON:

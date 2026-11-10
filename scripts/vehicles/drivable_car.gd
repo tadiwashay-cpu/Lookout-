@@ -162,8 +162,10 @@ func _build_from_model() -> void:
 		var is_front := wheel_name.begins_with("Wheel_F")
 		var wheel := VehicleWheel3D.new()
 		wheel.name = wheel_name
-		var mesh_size := wheel_mesh.get_aabb().size
-		wheel.wheel_radius = maxf(mesh_size.y, mesh_size.z) * 0.5
+		# Radius from the tyre as drawn (includes the model's scale), so the
+		# physics wheel and the visible tyre touch the road at the same point.
+		var drawn := wheel_mesh.global_transform * wheel_mesh.get_aabb()
+		wheel.wheel_radius = maxf(drawn.size.y, minf(drawn.size.x, drawn.size.z)) * 0.5
 		wheel.wheel_rest_length = 0.16
 		# Attach the suspension above the hub so the resting wheel sits where
 		# the model drew it (otherwise the car squats and wheels look sunken).
@@ -183,7 +185,9 @@ func _build_from_model() -> void:
 		var visual_basis := wheel_mesh.global_basis
 		wheel_mesh.get_parent().remove_child(wheel_mesh)
 		wheel.add_child(wheel_mesh)
-		wheel_mesh.position = Vector3.ZERO
+		# Godot's raycast wheel rests ~1.8 cm into the road surface: lift the
+		# drawn tyre by that much so it sits exactly on the asphalt (measured).
+		wheel_mesh.position = Vector3(0.0, 0.018, 0.0)
 		wheel_mesh.global_basis = visual_basis
 		_fade_distance(wheel_mesh)
 		_wheels.append(wheel)
