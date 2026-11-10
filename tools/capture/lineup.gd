@@ -40,6 +40,10 @@ func _ready() -> void:
 			rig.armed = clip.begins_with("pistol") or clip.begins_with("shotgun")
 			holder.add_child(rig)
 			rig.setup(MODELS[i], 1.68 if MODELS[i].begins_with("civ_f") else 1.8)
+			if clip.begins_with("pistol"):
+				rig.set_weapon("glock17")
+			elif clip.begins_with("shotgun"):
+				rig.set_weapon("m4a1")
 			rig.rotation.y = PI   # face the camera
 			if rig.anim and rig.anim.has_animation(clip):
 				rig.anim.play(clip)

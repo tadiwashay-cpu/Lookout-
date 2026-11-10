@@ -77,6 +77,7 @@ static var cam_view: CamView = CamView.CLOSE
 static var night := 0.0
 const BLUR_FROM := 41.7   # m/s = 150 km/h
 var _lamp_materials: Array[StandardMaterial3D] = []
+var _shader_lamps: Array[ShaderMaterial] = []
 var _lamps_on := -1.0
 var _headlights: Array[SpotLight3D] = []
 var _engine_sound: AudioStreamPlayer3D
@@ -116,7 +117,7 @@ func _ready() -> void:
 		_build_light_bar()
 	elif _own_lights and not is_police:
 		_setup_head_tail_lights()
-	if _lamp_materials.is_empty() and not is_police:
+	if _lamp_materials.is_empty() and _shader_lamps.is_empty() and not is_police:
 		_setup_optics_lamps()   # lamps painted on the body ("Optics" materials)
 	elif _own_lights and is_police:
 		_lights_material = StandardMaterial3D.new()
@@ -513,7 +514,7 @@ func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool
 func _physics_process(delta: float) -> void:
 	_slow_timer = maxf(_slow_timer - delta, 0.0)
 	_last_velocity = linear_velocity
-	if not _lamp_materials.is_empty() or not _headlights.is_empty():
+	if not _lamp_materials.is_empty() or not _shader_lamps.is_empty() or not _headlights.is_empty():
 		_update_lamps()
 	_stabilize(delta)
 	if driver == null and not ai_enabled:
@@ -561,13 +562,23 @@ func _setup_optics_lamps() -> void:
 		var base := body_mesh.mesh.surface_get_material(s) as StandardMaterial3D
 		if base == null or not base.resource_name.begins_with("Optics"):
 			continue
-		var lamp := base.duplicate() as StandardMaterial3D
-		lamp.emission_enabled = true
-		# Front lamps glow white, rear lamps red (models that don't say: white).
-		lamp.emission = Color(1.0, 0.1, 0.06) if base.resource_name.contains("Rear") else Color(1.0, 0.95, 0.85)
-		lamp.emission_energy_multiplier = 0.0
-		body_mesh.set_surface_override_material(s, lamp)
-		_lamp_materials.append(lamp)
+		if base.resource_name.contains("Front") or base.resource_name.contains("Rear"):
+			# Separate materials per end (our procedural supercars).
+			var lamp := base.duplicate() as StandardMaterial3D
+			lamp.emission_enabled = true
+			lamp.emission = Color(1.0, 0.1, 0.06) if base.resource_name.contains("Rear") else Color(1.0, 0.95, 0.85)
+			lamp.emission_energy_multiplier = 0.0
+			body_mesh.set_surface_override_material(s, lamp)
+			_lamp_materials.append(lamp)
+		else:
+			# One material for all lamps (car pack): colour by position in a shader.
+			var shader_lamp := ShaderMaterial.new()
+			shader_lamp.shader = preload("res://assets/materials/shaders/car_lamp.gdshader")
+			shader_lamp.set_shader_parameter(&"albedo_tex", base.albedo_texture)
+			shader_lamp.set_shader_parameter(&"albedo", base.albedo_color)
+			shader_lamp.set_shader_parameter(&"split_z", body_mesh.get_aabb().get_center().z)
+			body_mesh.set_surface_override_material(s, shader_lamp)
+			_shader_lamps.append(shader_lamp)
 
 
 func _update_lamps() -> void:
@@ -577,6 +588,8 @@ func _update_lamps() -> void:
 	_lamps_on = on
 	for lamp in _lamp_materials:
 		lamp.emission_energy_multiplier = on * 9.0
+	for lamp in _shader_lamps:
+		lamp.set_shader_parameter(&"glow", on * 6.0)
 	for spot in _headlights:
 		spot.visible = on > 0.3
 
@@ -842,7 +855,7 @@ func _process(delta: float) -> void:
 		CamView.HOOD, CamView.INTERIOR:
 			# Hood: just above the bonnet, ahead of the windscreen (only the bonnet in view).
 			var front := -_body_aabb.position.z if _body_aabb.size != Vector3.ZERO else 2.0
-			var seat := Vector3(0.36, 1.12, 0.1) if cam_view == CamView.INTERIOR else Vector3(0.0, _roof_height * 0.84, front * 0.12)
+			var seat := Vector3(0.36, 1.12, 0.1) if cam_view == CamView.INTERIOR else Vector3(0.0, _roof_height * 0.8, front * 0.42)
 			_camera.global_position = xf * seat
 			_camera.global_basis = xf.basis.rotated(xf.basis.y, PI + _cam_yaw_offset)
 			_cam_yaw_offset = move_toward(_cam_yaw_offset, 0.0, delta * 0.8)

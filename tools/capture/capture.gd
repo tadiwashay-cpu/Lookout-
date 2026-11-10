@@ -55,6 +55,16 @@ func _ready() -> void:
 		await _shot(cam, ped.global_position + Vector3(2.0, 0.6, 2.0), ped.global_position + Vector3.UP * 0.6, "pedestrian")
 	# 5. Wide street view (overall look).
 	await _shot(cam, p.global_position + Vector3(0, 6, 14), p.global_position + Vector3(0, 1, -10), "street")
+	# 6. Night drive: close chase + hood views from the real car cameras.
+	if car:
+		world.day_night.time_of_day = 0.0
+		world.day_night.call(&"_apply")
+		car.enter(p)
+		for view in [DrivableCar.CamView.CLOSE, DrivableCar.CamView.HOOD]:
+			DrivableCar.cam_view = view
+			await _frames(30)
+			get_viewport().get_texture().get_image().save_png("%s/drive_%s.png" % [out_dir, DrivableCar.CamView.keys()[view].to_lower()])
+			print("SHOT drive ", view)
 	print("CAPTURE_DONE")
 	get_tree().quit()
 
