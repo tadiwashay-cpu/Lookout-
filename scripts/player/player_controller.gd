@@ -521,6 +521,7 @@ func _play_finisher(target: Node3D) -> void:
 	_finisher_cam.fov = 58.0
 	_finisher_cam.near = 0.05
 	_finisher_cam.top_level = true
+	_finisher_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(_finisher_cam)
 	_finisher_cam.global_position = mid + side * 3.0 + Vector3.UP * -0.35
 	_finisher_cam.look_at(mid, Vector3.UP)
@@ -820,8 +821,8 @@ func _perform_punch() -> void:
 
 
 func _hit_stop(duration: float) -> void:
-	if Session.networked:
-		return   # never slow time in multiplayer
+	if Session.networked or _finisher_cam:
+		return   # never slow time in multiplayer; don't cut a finisher's slow-mo short
 	Engine.time_scale = 0.05
 	await get_tree().create_timer(duration, true, false, true).timeout
 	Engine.time_scale = 1.0

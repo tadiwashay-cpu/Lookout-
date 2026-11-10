@@ -51,7 +51,7 @@ func _draw() -> void:
 
 func _draw_pursuit() -> void:
 	var w := 420.0
-	var origin := Vector2(size.x - w - 130.0, 22.0)
+	var origin := Vector2((size.x - w) * 0.5, 116.0)   # top centre under the status line, clear of ammo/gear text
 	draw_rect(Rect2(origin, Vector2(w, 92)), Color(0, 0, 0, 0.55))
 	var seen := WantedSystem.is_seen()
 	var title := "PURSUIT" if seen else "EVADE"

@@ -45,6 +45,7 @@ var first_person := false
 ## below the floor (different rigs/clips sit slightly differently).
 var ground_feet := true
 var _head := -1
+var _head_hidden := false
 var _feet: Array[int] = []
 var _foot_rest_y := 0.0
 var _model_base_y := 0.0
@@ -149,7 +150,7 @@ func setup(character_id: String, height: float = 1.8) -> void:
 		var instance := mesh as MeshInstance3D
 		for s in instance.mesh.get_surface_count():
 			var base := instance.mesh.surface_get_material(s) as StandardMaterial3D
-			if base:
+			if base and character_id == "npc":   # only tinted models need their own copies
 				var copy := base.duplicate() as StandardMaterial3D
 				instance.set_surface_override_material(s, copy)
 				_materials.append(copy)
@@ -176,6 +177,7 @@ func set_weapon(id: String) -> void:
 	weapon_class = data["class"]
 	weapon = (load(data["path"]) as PackedScene).instantiate() as Node3D
 	weapon.top_level = true
+	weapon.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # placed from the smoothed hand
 	add_child(weapon)
 	muzzle = weapon.find_child("Muzzle", true, false) as Node3D
 	var support := weapon.find_child("Support", true, false) as Node3D
@@ -192,8 +194,9 @@ func kick(amount: float = 1.0) -> void:
 func _process(delta: float) -> void:
 	_recoil = move_toward(_recoil, 0.0, delta * 0.6)
 	if skeleton:
-		if first_person and _head >= 0:
-			skeleton.set_bone_pose_scale(_head, Vector3(0.001, 0.001, 0.001))
+		if _head >= 0 and (first_person or _head_hidden):
+			skeleton.set_bone_pose_scale(_head, Vector3.ONE * 0.001 if first_person else Vector3.ONE)
+			_head_hidden = first_person
 		if ground_feet and not _feet.is_empty():
 			_keep_feet_on_ground(delta)
 	_update_weapon()
@@ -213,7 +216,7 @@ func _keep_feet_on_ground(delta: float) -> void:
 
 
 func _palm(hand: int, finger: int) -> Vector3:
-	var sk := skeleton.global_transform
+	var sk := skeleton.get_global_transform_interpolated()
 	var wrist := sk * skeleton.get_bone_global_pose(hand).origin
 	if finger >= 0:
 		var knuckle := sk * skeleton.get_bone_global_pose(finger).origin
@@ -233,7 +236,7 @@ func _update_weapon() -> void:
 	if skeleton == null or _right_hand < 0 or _left_hand < 0:
 		weapon.global_transform = Transform3D(Basis.looking_at(forward, Vector3.UP), global_position + Vector3(0, 1.3, 0) + forward * 0.3)
 		return
-	var hand := (skeleton.global_transform * skeleton.get_bone_global_pose(_right_hand)).orthonormalized()
+	var hand := (skeleton.get_global_transform_interpolated() * skeleton.get_bone_global_pose(_right_hand)).orthonormalized()
 	var key := "%s|%s" % [_model_key, weapon_id]
 	if not _fit_cache.has(key) and anim and anim.current_animation in [&"idle", &"pistol_idle", &"shotgun_idle"] and anim.current_animation_position > 0.25:
 		_fit_cache[key] = hand.affine_inverse() * _two_hand_pose()

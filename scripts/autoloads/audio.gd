@@ -18,13 +18,14 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for i in POOL:
 		var p := AudioStreamPlayer3D.new()
-		p.bus = &"Master"
+		p.bus = &"SFX"
 		p.unit_size = 8.0
 		p.max_distance = 120.0
 		p.attenuation_filter_cutoff_hz = 6000.0
 		add_child(p)
 		_players.append(p)
 	_ui = AudioStreamPlayer.new()
+	_ui.bus = &"SFX"
 	add_child(_ui)
 
 
@@ -48,7 +49,7 @@ func play(name: String, at: Vector3, volume_db: float = 0.0, pitch_jitter: float
 	_next = (_next + 1) % POOL
 	p.stream = s
 	p.global_position = at
-	p.volume_db = volume_db + linear_to_db(GameSettings.sfx_volume * GameSettings.master_volume)
+	p.volume_db = volume_db
 	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
 	p.play()
 
@@ -57,7 +58,7 @@ func play_ui(name: String) -> void:
 	var s := stream(name)
 	if s:
 		_ui.stream = s
-		_ui.volume_db = linear_to_db(GameSettings.sfx_volume * GameSettings.master_volume)
+		_ui.volume_db = 0.0
 		_ui.play()
 
 
@@ -72,10 +73,11 @@ func loop(parent: Node3D, name: String, volume_db: float = 0.0) -> AudioStreamPl
 		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		wav.loop_end = int(wav.get_length() * wav.mix_rate)
 	var p := AudioStreamPlayer3D.new()
+	p.bus = &"SFX"
 	p.stream = s
 	p.unit_size = 10.0
 	p.max_distance = 150.0
-	p.volume_db = volume_db + linear_to_db(GameSettings.sfx_volume * GameSettings.master_volume)
+	p.volume_db = volume_db
 	parent.add_child(p)
 	p.play()
 	return p

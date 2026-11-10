@@ -45,6 +45,8 @@ func _ready() -> void:
 	# Tap the minimap for the full map.
 	var map_button := Button.new()
 	map_button.flat = true
+	map_button.focus_mode = Control.FOCUS_NONE
+	map_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	map_button.position = _minimap.position
 	map_button.size = Vector2(Minimap.RADIUS_PX * 2.0 + 8.0, Minimap.RADIUS_PX * 2.0 + 8.0)
 	map_button.pressed.connect(func() -> void: _full_map.open())

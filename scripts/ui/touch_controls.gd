@@ -146,6 +146,9 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_touch_down(index: int, pos: Vector2) -> void:
+	# Minimap (tap = full map) and the open full map are not joystick space.
+	if Rect2(20, 20, 248, 248).has_point(pos) or get_tree().get_nodes_in_group(&"full_map_open").size() > 0:
+		return
 	for button in _buttons:
 		if pos.distance_to(button["pos"]) <= float(button["r"]) * 1.15:
 			_button_touches[index] = button

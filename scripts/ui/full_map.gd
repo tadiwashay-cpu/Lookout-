@@ -20,12 +20,14 @@ func open() -> void:
 	if _bounds.size == Vector2.ZERO:
 		_compute_bounds()
 	visible = true
+	add_to_group(&"full_map_open")
 	queue_redraw()
 
 
 func _gui_input(event: InputEvent) -> void:
 	if (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed):
 		visible = false
+		remove_from_group(&"full_map_open")
 		accept_event()
 
 

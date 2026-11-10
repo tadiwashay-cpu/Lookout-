@@ -284,6 +284,7 @@ func enter(player: PlayerController) -> void:
 	_camera.fov = 74.0
 	_camera.far = 800.0
 	_camera.top_level = true
+	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # we place it from the interpolated car
 	add_child(_camera)
 	_camera.global_position = global_position - global_basis.z * 6.0 + Vector3.UP * 2.5
 	_camera.make_current()
@@ -491,7 +492,7 @@ func _update_speed_fx(speed: float) -> void:
 
 
 func _next_cam_view() -> void:
-	var count := CamView.size() if bool(data.get("interior", false)) else CamView.INTERIOR
+	var count: int = CamView.size() if bool(data.get("interior", false)) else int(CamView.INTERIOR)
 	cam_view = ((int(cam_view) + 1) % count) as CamView
 	_cam_yaw_offset = 0.0
 
