@@ -1,146 +1,227 @@
 {
- "throw_grenade": {
-  "length": 3.2,
-  "ground_speed": 0.004
+ "idle_unarmed": {
+  "length": 1.667,
+  "ground_speed": 0.0,
+  "loop": true
  },
- "run_back": {
-  "length": 0.533,
-  "ground_speed": 2.534
+ "fight_idle": {
+  "length": 1.333,
+  "ground_speed": 0.002,
+  "loop": true
  },
- "strafe_left_run": {
-  "length": 0.533,
-  "ground_speed": 2.594
- },
- "turn_right": {
-  "length": 1.0,
-  "ground_speed": 0.0
- },
- "run": {
-  "length": 0.733,
-  "ground_speed": 2.904
- },
- "walk_back": {
-  "length": 1.4,
-  "ground_speed": 1.011
- },
- "hit": {
-  "length": 0.433,
-  "ground_speed": 0.001
- },
- "fire": {
-  "length": 0.267,
-  "ground_speed": 0.0
- },
- "reload": {
-  "length": 3.3,
-  "ground_speed": 0.0
- },
- "strafe_right_run": {
-  "length": 0.667,
-  "ground_speed": 3.038
- },
- "turn_left": {
-  "length": 0.9,
-  "ground_speed": 0.035
- },
- "strafe_left": {
-  "length": 0.933,
-  "ground_speed": 1.26
- },
- "strafe_right": {
-  "length": 1.4,
-  "ground_speed": 0.701
- },
- "idle": {
-  "length": 3.0,
-  "ground_speed": 0.0
- },
- "jump_big": {
-  "length": 2.367,
-  "ground_speed": 2.473
- },
- "block": {
-  "length": 3.433,
-  "ground_speed": 0.0
- },
- "death": {
-  "length": 4.4,
-  "ground_speed": 0.074
- },
- "flying_kick": {
-  "length": 1.5,
-  "ground_speed": 1.343
- },
- "punch_2": {
-  "length": 2.1,
-  "ground_speed": 0.0
- },
- "punch_3": {
-  "length": 2.167,
-  "ground_speed": 0.0
- },
- "sprint_start": {
+ "walk": {
   "length": 0.8,
-  "ground_speed": 1.919
+  "ground_speed": 3.131,
+  "loop": true
  },
- "jump_unarmed": {
-  "length": 2.167,
-  "ground_speed": 0.0
- },
- "fall": {
-  "length": 2.633,
-  "ground_speed": 0.663
- },
- "punch_heavy": {
-  "length": 2.167,
-  "ground_speed": 0.0
+ "walk_back_unarmed": {
+  "length": 0.8,
+  "ground_speed": 3.064,
+  "loop": true
  },
  "strafe_left_unarmed": {
-  "length": 1.033,
-  "ground_speed": 1.59
+  "length": 0.8,
+  "ground_speed": 2.969,
+  "loop": true
  },
- "punch_1": {
-  "length": 1.267,
-  "ground_speed": 0.0
+ "strafe_right_unarmed": {
+  "length": 0.8,
+  "ground_speed": 2.871,
+  "loop": true
  },
- "hit_unarmed": {
-  "length": 1.833,
-  "ground_speed": 0.0
+ "run_unarmed": {
+  "length": 0.8,
+  "ground_speed": 6.206,
+  "loop": true
+ },
+ "run_back": {
+  "length": 0.8,
+  "ground_speed": 5.341,
+  "loop": true
+ },
+ "strafe_left_run": {
+  "length": 0.8,
+  "ground_speed": 5.421,
+  "loop": true
+ },
+ "strafe_right_run": {
+  "length": 0.8,
+  "ground_speed": 5.409,
+  "loop": true
+ },
+ "sprint": {
+  "length": 0.6,
+  "ground_speed": 10.0,
+  "loop": true
  },
  "jump": {
   "length": 0.6,
-  "ground_speed": 0.003
+  "ground_speed": 0.003,
+  "loop": false
  },
- "strafe_right_unarmed": {
-  "length": 1.033,
-  "ground_speed": 1.59
+ "jump_unarmed": {
+  "length": 0.6,
+  "ground_speed": 0.003,
+  "loop": false
  },
- "walk_back_unarmed": {
-  "length": 1.2,
-  "ground_speed": 1.04
+ "jump_big": {
+  "length": 0.6,
+  "ground_speed": 0.003,
+  "loop": false
  },
- "kick_front": {
-  "length": 2.2,
-  "ground_speed": 0.097
+ "falling": {
+  "length": 1.067,
+  "ground_speed": 0.0,
+  "loop": true
+ },
+ "fall": {
+  "length": 1.067,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "land": {
+  "length": 0.467,
+  "ground_speed": 0.006,
+  "loop": false
+ },
+ "punch_1": {
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "punch_2": {
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "punch_3": {
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "punch_heavy": {
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
  },
  "boxing": {
-  "length": 3.0,
-  "ground_speed": 0.037
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
  },
- "fight_idle": {
-  "length": 2.0,
-  "ground_speed": 0.018
- },
- "ko_loser": {
-  "length": 3.0,
-  "ground_speed": 0.049
- },
- "ko_winner": {
-  "length": 4.0,
-  "ground_speed": 0.043
+ "kick_front": {
+  "length": 1.0,
+  "ground_speed": 0.0,
+  "loop": false
  },
  "kick_round": {
-  "length": 2.3,
-  "ground_speed": 0.271
+  "length": 1.0,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "flying_kick": {
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "block": {
+  "length": 2.0,
+  "ground_speed": 0.0,
+  "loop": true
+ },
+ "block_hit": {
+  "length": 0.5,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "hit_unarmed": {
+  "length": 0.5,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "hit": {
+  "length": 0.5,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "hit_back": {
+  "length": 0.5,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "death": {
+  "length": 1.3,
+  "ground_speed": 0.784,
+  "loop": false
+ },
+ "death_front": {
+  "length": 1.3,
+  "ground_speed": 0.784,
+  "loop": false
+ },
+ "death_back": {
+  "length": 1.2,
+  "ground_speed": 1.808,
+  "loop": false
+ },
+ "ko_loser": {
+  "length": 1.533,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "getup": {
+  "length": 4.0,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "ko_winner": {
+  "length": 1.0,
+  "ground_speed": 0.003,
+  "loop": false
+ },
+ "stunned": {
+  "length": 2.0,
+  "ground_speed": 0.0,
+  "loop": true
+ },
+ "dodge_left": {
+  "length": 0.667,
+  "ground_speed": 6.003,
+  "loop": false
+ },
+ "dodge_right": {
+  "length": 0.667,
+  "ground_speed": 5.997,
+  "loop": false
+ },
+ "dodge_back": {
+  "length": 0.667,
+  "ground_speed": 6.0,
+  "loop": false
+ },
+ "roll": {
+  "length": 0.867,
+  "ground_speed": 5.569,
+  "loop": false
+ },
+ "turn_left": {
+  "length": 0.5,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "turn_right": {
+  "length": 0.5,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "throw_grenade": {
+  "length": 0.8,
+  "ground_speed": 0.0,
+  "loop": false
+ },
+ "pickup": {
+  "length": 1.2,
+  "ground_speed": 0.0,
+  "loop": false
  }
 }

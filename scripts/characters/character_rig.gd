@@ -13,15 +13,15 @@ const LOOPING: Array[StringName] = [
 	&"idle", &"idle_unarmed", &"fight_idle", &"walk", &"run_unarmed", &"sprint", &"falling",
 	&"walk_back", &"walk_back_unarmed", &"run", &"run_back",
 	&"strafe_left", &"strafe_right", &"strafe_left_run", &"strafe_right_run",
-	&"strafe_left_unarmed", &"strafe_right_unarmed", &"fire", &"block", &"boxing",
+	&"strafe_left_unarmed", &"strafe_right_unarmed", &"fire", &"block", &"stunned",
 	&"pistol_idle", &"pistol_walk", &"shotgun_idle", &"shotgun_walk",
 ]
 ## Metres per second each locomotion clip covers at speed 1 (measured on import).
+## Foot speed of each loop (m/s at 1.8 m tall) so feet don't slide.
+## RPG pack values measured on its root-motion clips, scaled from its 2.35 m rig.
 const GROUND_SPEED := {
-	&"walk": 1.51, &"run_unarmed": 5.12, &"sprint": 7.76,
-	&"walk_back": 1.01, &"walk_back_unarmed": 1.0, &"run": 2.9, &"run_back": 2.53,
-	&"strafe_left": 1.26, &"strafe_right": 0.7, &"strafe_left_run": 2.59, &"strafe_right_run": 3.04,
-	&"strafe_left_unarmed": 1.6, &"strafe_right_unarmed": 1.6,
+	&"walk": 2.4, &"walk_back_unarmed": 2.36, &"run_unarmed": 4.78, &"run_back": 4.1, &"sprint": 7.7,
+	&"strafe_left_unarmed": 2.29, &"strafe_right_unarmed": 2.21, &"strafe_left_run": 4.17, &"strafe_right_run": 4.16,
 	&"pistol_walk": 1.59, &"shotgun_walk": 1.55,
 }
 ## Gun clip sets by weapon class.

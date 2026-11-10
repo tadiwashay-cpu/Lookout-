@@ -128,7 +128,10 @@ def main(src_path, rm_path, char_path, out_path):
     tbones = tgt.data.bones
     pre = "mixamorig:"
     mapped = {pre + m: s for m, s in BONES.items() if pre + m in tbones and s in src.data.bones}
-    src_rest = {b.name: src.matrix_world @ b.matrix_local for b in src.data.bones}
+    # The RPG character faces +Y in Blender, Mixamo rigs face -Y: turn the
+    # source round 180 degrees so both look the same way before comparing.
+    flip = Matrix.Rotation(3.141592653589793, 4, 'Z')
+    src_rest = {b.name: flip @ src.matrix_world @ b.matrix_local for b in src.data.bones}
     tgt_rest = {b.name: mw @ b.matrix_local for b in tbones}
     scale = tgt_rest[pre + "Hips"].translation.z / max(src_rest["B_Pelvis"].translation.z, 1e-4)
     # Each aimed bone's direction to its child, in the bone's own rest frame.
@@ -149,7 +152,18 @@ def main(src_path, rm_path, char_path, out_path):
             print("@missing", rpg)
             continue
         if rpg not in cache:
-            cache[rpg] = sample(src, action_src, list(set(mapped.values())))
+            n0, raw = sample(src, action_src, list(set(mapped.values())) + ["Motion"])
+            # The pack turns its "Motion" root during clips; measure every
+            # bone relative to it so the body faces forward like the rest pose.
+            if "Motion" in raw:
+                motion_rest = src_rest["Motion"]
+                for b in raw:
+                    if b == "Motion":
+                        continue
+                    raw[b] = [motion_rest @ (flip @ raw["Motion"][i]).inverted() @ flip @ m for i, m in enumerate(raw[b])]
+            else:
+                raw = {b: [flip @ m for m in v] for b, v in raw.items()}
+            cache[rpg] = (n0, raw)
         n, frames = cache[rpg]
         action = bpy.data.actions.new(clip)
         action.use_fake_user = True
