@@ -213,6 +213,86 @@ func show_banner(text: String, hold: float, font_size: int = 72) -> void:
 	_banner_tween.tween_property(_banner, "modulate:a", 0.0, 0.5)
 
 
+var _fade_rect: ColorRect
+var _menu: PanelContainer
+
+
+## Black fade for doors/interiors. await hud.fade(true) / fade(false).
+func fade(to_black: bool) -> void:
+	if _fade_rect == null:
+		_fade_rect = ColorRect.new()
+		_fade_rect.color = Color(0, 0, 0, 0)
+		_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_root.add_child(_fade_rect)
+	var tween := create_tween()
+	tween.tween_property(_fade_rect, "color:a", 1.0 if to_black else 0.0, 0.35)
+	await tween.finished
+
+
+## Simple shop/teller menu. `rows` returns [[label, button text, callable], ...]
+## and is called again after every purchase so prices/cash stay current.
+## Pauses story mode while open.
+func open_menu(title: String, rows: Callable) -> void:
+	if _menu:
+		_menu.queue_free()
+	_menu = PanelContainer.new()
+	_menu.process_mode = Node.PROCESS_MODE_ALWAYS
+	_menu.set_anchors_preset(Control.PRESET_CENTER)
+	_menu.offset_left = -600
+	_menu.offset_right = 600
+	_menu.offset_top = -400
+	_menu.offset_bottom = 400
+	_root.add_child(_menu)
+	var box := VBoxContainer.new()
+	_menu.add_child(box)
+	var head := Label.new()
+	head.text = title
+	head.add_theme_font_override("font", UITheme.TITLE_FONT)
+	head.add_theme_font_size_override("font_size", 52)
+	box.add_child(head)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	var close := Button.new()
+	close.text = "CLOSE"
+	close.pressed.connect(func() -> void:
+		_menu.queue_free()
+		_menu = null
+		if not Session.networked:
+			get_tree().paused = false)
+	box.add_child(close)
+	_fill_menu(list, rows)
+	if not Session.networked:
+		get_tree().paused = true
+
+
+func _fill_menu(list: VBoxContainer, rows: Callable) -> void:
+	for child in list.get_children():
+		child.queue_free()
+	for row: Array in rows.call():
+		var line := HBoxContainer.new()
+		var label := Label.new()
+		label.text = row[0]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.add_theme_font_size_override("font_size", 26)
+		line.add_child(label)
+		if str(row[1]) != "":
+			var button := Button.new()
+			button.text = row[1]
+			button.custom_minimum_size.x = 220
+			var action: Callable = row[2]
+			button.pressed.connect(func() -> void:
+				action.call()
+				_fill_menu(list, rows))
+			line.add_child(button)
+		list.add_child(line)
+
+
 func show_hint(text: String) -> void:
 	_hint.text = text
 	if _hint_tween:

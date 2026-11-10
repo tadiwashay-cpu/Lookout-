@@ -35,7 +35,11 @@ func _ready() -> void:
 	if player:
 		player.vehicle_changed.connect(_on_vehicle_changed)
 		player.nearby_vehicle_changed.connect(func(v: DrivableCar) -> void:
-			_can_interact = v != null
+			_can_interact = v != null or player.nearby_interactable != null
+			_layout()
+		)
+		player.nearby_interactable_changed.connect(func(spot: Interactable) -> void:
+			_can_interact = spot != null or player.nearby_vehicle != null
 			_layout()
 		)
 		player.loadout_changed.connect(_layout)

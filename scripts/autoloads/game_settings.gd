@@ -44,6 +44,8 @@ var owned_cars: Array = ["coupe"]
 var garage_car: String = "coupe"
 ## Race career: how many events you've won (they unlock in order).
 var career_won: int = 0
+## Money in the bank: safe from KO/bust fines, earns interest each in-game day.
+var bank_balance: int = 0
 
 # --- camera / controls
 var camera_mode: int = THIRD_PERSON
@@ -80,6 +82,7 @@ func _ready() -> void:
 		owned_cars = config.get_value("profile", "owned_cars", owned_cars)
 		garage_car = config.get_value("profile", "garage_car", garage_car)
 		career_won = config.get_value("profile", "career_won", career_won)
+		bank_balance = config.get_value("profile", "bank_balance", bank_balance)
 		day_length_minutes = config.get_value("graphics", "day_length", day_length_minutes)
 		camera_mode = config.get_value("camera", "mode", camera_mode)
 		look_sensitivity = config.get_value("camera", "look_sensitivity", look_sensitivity)
@@ -222,6 +225,27 @@ func sell_weapon(id: String) -> int:
 	return value
 
 
+func bank_deposit(amount: int) -> void:
+	amount = clampi(amount, 0, money)
+	money -= amount
+	bank_balance += amount
+	save()
+
+
+func bank_withdraw(amount: int) -> void:
+	amount = clampi(amount, 0, bank_balance)
+	bank_balance -= amount
+	money += amount
+	save()
+
+
+func bank_interest(rate: float) -> int:
+	var gain := int(bank_balance * rate)
+	bank_balance += gain
+	save()
+	return gain
+
+
 func add_money(amount: int) -> void:
 	money = maxi(money + amount, 0)
 	save()
@@ -242,6 +266,7 @@ func save() -> void:
 	config.set_value("profile", "owned_cars", owned_cars)
 	config.set_value("profile", "garage_car", garage_car)
 	config.set_value("profile", "career_won", career_won)
+	config.set_value("profile", "bank_balance", bank_balance)
 	config.set_value("graphics", "day_length", day_length_minutes)
 	config.set_value("camera", "mode", camera_mode)
 	config.set_value("camera", "look_sensitivity", look_sensitivity)

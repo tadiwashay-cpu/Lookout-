@@ -44,7 +44,12 @@ func clock_text() -> String:
 
 
 func _process(delta: float) -> void:
+	var before := time_of_day
 	time_of_day = fmod(time_of_day + delta / maxf(GameSettings.day_length_minutes * 60.0, 30.0), 1.0)
+	if time_of_day < before and Session.mode == Session.MODE_STORY:   # a new day: bank interest
+		var gain := GameSettings.bank_interest(Places.INTEREST)
+		if gain > 0 and world.hud:
+			world.hud.show_hint("Bank interest: +$%d" % gain)
 	_tick -= delta
 	if _tick <= 0.0:
 		_tick = 0.25   # lighting changes slowly; no need to update every frame

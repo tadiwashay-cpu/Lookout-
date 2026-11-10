@@ -14,6 +14,7 @@ signal knocked_out
 signal respawned
 signal vehicle_changed(vehicle: DrivableCar)
 signal nearby_vehicle_changed(vehicle: DrivableCar)
+signal nearby_interactable_changed(spot: Interactable)
 signal ammo_changed(in_mag: int, reserve: int)
 signal loadout_changed
 
@@ -77,6 +78,7 @@ var health: HealthComponent
 var rig: CharacterRig
 var current_vehicle: DrivableCar
 var nearby_vehicle: DrivableCar
+var nearby_interactable: Interactable
 
 ## Missions/modes switch these.
 var weapons_allowed := true:
@@ -356,6 +358,9 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed(&"interact") and nearby_vehicle and not _attacking \
 			and Engine.get_physics_frames() != _left_vehicle_frame:
 		nearby_vehicle.enter(self)
+		return
+	if Input.is_action_just_pressed(&"interact") and nearby_interactable and nearby_vehicle == null and not _attacking:
+		nearby_interactable.used.emit(self)
 		return
 
 	if is_armed():
@@ -901,6 +906,8 @@ func _on_died() -> void:
 	if not rig.replay(death, 1.2, 0.1):
 		create_tween().tween_property(_model, "rotation:x", -PI * 0.5, 0.4)
 	knocked_out.emit()
+	if Session.mode == Session.MODE_STORY:
+		_ko_fine()
 	if Session.mode != Session.MODE_STORY:
 		# Works offline too (solo practice): Net emits locally when not connected.
 		Net.announce_eliminated(Session.my_id(), last_attacker_peer)
@@ -927,6 +934,44 @@ func _respawn() -> void:
 	if Session.mode == Session.MODE_STORY:
 		WantedSystem.clear()
 	respawned.emit()
+
+
+## Story: getting knocked out costs some of the cash you carry (bank it!).
+func _ko_fine() -> void:
+	var fine := mini(500, GameSettings.money / 10)
+	if fine > 0:
+		GameSettings.add_money(-fine)
+		var hud := get_tree().get_first_node_in_group(&"hud")
+		if hud:
+			hud.call(&"show_hint", "Knocked out: lost $%d cash. Money in the bank is safe." % fine)
+
+
+func set_interactable(spot: Interactable) -> void:
+	nearby_interactable = spot
+	nearby_interactable_changed.emit(spot)
+	var hud := get_tree().get_first_node_in_group(&"hud")
+	if hud:
+		hud.call(&"show_hint", "ENTER: %s" % spot.prompt)
+
+
+func clear_interactable(spot: Interactable) -> void:
+	if nearby_interactable == spot:
+		nearby_interactable = null
+		nearby_interactable_changed.emit(null)
+
+
+## Move without dying/healing (doors, interiors).
+func respawn_at_quiet(point: Vector3, yaw: float) -> void:
+	global_position = point
+	velocity = Vector3.ZERO
+	_yaw = yaw
+	_model_yaw = yaw
+	reset_physics_interpolation()
+
+
+func refill_ammo() -> void:
+	reserve = maxi(reserve, mag_size * 5)
+	ammo_changed.emit(ammo, reserve)
 
 
 func respawn_at(point: Vector3) -> void:

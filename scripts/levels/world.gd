@@ -26,6 +26,7 @@ var mode: GameMode
 var hq_spawn := Vector3.ZERO
 var hq_garage := Vector3.ZERO
 var bank_position := Vector3.ZERO
+var pawn_shop_position := Vector3.ZERO
 var precinct_position := Vector3.ZERO
 var supercar_spot := Vector3.ZERO
 var extraction_points: Dictionary = {}
@@ -68,6 +69,8 @@ func _ready() -> void:
 	_spawn_cars()
 	_spawn_player()
 	_build_ui()
+	if Session.mode == Session.MODE_STORY:
+		Places.build(self)   # enterable bank + pawn shop
 	day_night = DayNight.new()
 	day_night.name = "DayNight"
 	day_night.world = self
