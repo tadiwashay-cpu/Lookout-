@@ -59,6 +59,8 @@ var siren_on := false
 var _skid_last: Dictionary = {}   # rear wheel -> last contact point while skidding
 var _skids: SkidMarks
 var wrecked := false
+var _last_velocity := Vector3.ZERO
+var _cam_shake := 0.0
 var _fuse_lit := false
 var _smoke: GPUParticles3D
 var _fire: GPUParticles3D
@@ -116,7 +118,7 @@ func _ready() -> void:
 		_setup_head_tail_lights()
 	if _lamp_materials.is_empty() and not is_police:
 		_setup_optics_lamps()   # lamps painted on the body ("Optics" materials)
-	elif _own_lights:
+	elif _own_lights and is_police:
 		_lights_material = StandardMaterial3D.new()
 		_lights_material.emission_enabled = true
 		_own_lights.material_override = _lights_material
@@ -493,8 +495,7 @@ func _char_body() -> void:
 	for node in find_children("*", "MeshInstance3D", true, false):
 		var mesh := node as MeshInstance3D
 		if mesh.mesh:
-			for i in mesh.mesh.get_surface_count():
-				mesh.set_surface_override_material(i, burnt)
+			mesh.material_override = burnt   # beats light-bar overrides too
 
 
 func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool = false) -> void:
@@ -507,6 +508,7 @@ func take_hit(damage: float, knockback: Vector3, _attacker: Node3D, _heavy: bool
 
 func _physics_process(delta: float) -> void:
 	_slow_timer = maxf(_slow_timer - delta, 0.0)
+	_last_velocity = linear_velocity
 	if not _lamp_materials.is_empty() or not _headlights.is_empty():
 		_update_lamps()
 	_stabilize(delta)
@@ -822,6 +824,13 @@ func _process(delta: float) -> void:
 		_flash_lights()
 
 	var xf := get_global_transform_interpolated()   # smooth: no physics-tick stutter
+	if _cam_shake > 0.0:
+		_cam_shake = maxf(_cam_shake - delta * 1.6, 0.0)
+		_camera.h_offset = randf_range(-1.0, 1.0) * _cam_shake * _cam_shake
+		_camera.v_offset = randf_range(-1.0, 1.0) * _cam_shake * _cam_shake
+	else:
+		_camera.h_offset = 0.0
+		_camera.v_offset = 0.0
 	var speed := linear_velocity.length()
 	_update_speed_fx(speed)
 	match cam_view:
@@ -870,12 +879,17 @@ func _flash_lights() -> void:
 		_lights_material.emission_energy_multiplier = 5.0
 
 
+func add_shake(amount: float) -> void:
+	_cam_shake = maxf(_cam_shake, amount)
+
+
 func _on_body_entered(body: Node) -> void:
 	var impact := linear_velocity.length()
+	var jolt := (_last_velocity - linear_velocity).length()   # how hard we actually hit
 	if impact > 7.0:
 		Audio.play("crash", global_position, minf(impact * 0.3 - 6.0, 4.0))
-	if impact > 14.0:
-		take_vehicle_damage((impact - 14.0) * 9.0)   # hard crashes wreck cars
+	if jolt > 12.0 and not body.has_method(&"take_hit"):
+		take_vehicle_damage.call_deferred((jolt - 12.0) * 9.0)   # hard crashes into the world wreck cars
 	if impact < 6.0 or not body.has_method(&"take_hit"):
 		return
 	if body is PlayerController:

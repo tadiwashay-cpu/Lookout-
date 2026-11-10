@@ -45,7 +45,11 @@ func begin() -> void:
 	_car.locked = true
 	_car.has_been_stolen = true
 	_car.freeze = true
-	player().refill_grenades(0 if _career() else 6)   # career races are clean
+	if _career():   # career races are clean: no grenades
+		player().grenades = 0
+		player().loadout_changed.emit()
+	else:
+		player().refill_grenades(6)
 	player().grenade_cooldown = 3.0
 	_build_rings()
 	Net.match_event.connect(_on_event)

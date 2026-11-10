@@ -259,19 +259,24 @@ func open_menu(title: String, rows: Callable) -> void:
 	scroll.add_child(list)
 	var close := Button.new()
 	close.text = "CLOSE"
-	close.pressed.connect(func() -> void:
-		_menu.queue_free()
-		_menu = null
-		if not Session.networked:
-			get_tree().paused = false)
+	close.pressed.connect(_close_menu)
 	box.add_child(close)
 	_fill_menu(list, rows)
 	if not Session.networked:
 		get_tree().paused = true
 
 
+func _close_menu() -> void:
+	if _menu:
+		_menu.queue_free()
+		_menu = null
+		if not Session.networked:
+			get_tree().paused = false
+
+
 func _fill_menu(list: VBoxContainer, rows: Callable) -> void:
 	for child in list.get_children():
+		list.remove_child(child)
 		child.queue_free()
 	for row: Array in rows.call():
 		var line := HBoxContainer.new()
@@ -346,6 +351,9 @@ func _build_pause_menu() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"pause") and _menu:
+		_close_menu()   # back/pause closes a shop menu first
+		return
 	if event.is_action_pressed(&"pause"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		if _pause_panel.visible:

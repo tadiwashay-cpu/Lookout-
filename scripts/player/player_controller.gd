@@ -79,6 +79,8 @@ var rig: CharacterRig
 var current_vehicle: DrivableCar
 var nearby_vehicle: DrivableCar
 var nearby_interactable: Interactable
+## Fell out of the world below this height -> respawn (lowered inside interiors).
+var kill_y := -40.0
 
 ## Missions/modes switch these.
 var weapons_allowed := true:
@@ -416,7 +418,7 @@ func _physics_process(delta: float) -> void:
 	_air_time = 0.0 if is_on_floor() else _air_time + delta
 	move_and_slide()
 	_update_facing_and_anim(move_dir, delta)
-	if global_position.y < -40.0:
+	if global_position.y < kill_y:
 		_respawn()
 
 
@@ -501,9 +503,11 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 
 ## Screen shake from the world (explosions).
 func add_shake(amount: float) -> void:
+	if current_vehicle:
+		current_vehicle.add_shake(amount)   # the car camera does its own shaking
+		return
 	_shake = maxf(_shake, amount)
-	if current_vehicle == null:
-		_fov_punch = maxf(_fov_punch, amount * 6.0)
+	_fov_punch = maxf(_fov_punch, amount * 6.0)
 
 
 ## Close-in fight camera: Clean Hands, or fists out with someone close.

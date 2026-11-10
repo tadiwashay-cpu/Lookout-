@@ -7,6 +7,7 @@ extends Node3D
 
 static var _soft: GradientTexture2D
 static var _mats: Dictionary = {}
+static var _cache: Dictionary = {}   # ramps/curves/debris mesh, built once
 
 
 static func spawn(tree: SceneTree, pos: Vector3, radius: float, energy: bool = false) -> void:
@@ -57,6 +58,9 @@ static func _billboard(key: String, additive: bool) -> StandardMaterial3D:
 
 
 func _ramp(colors: Array) -> GradientTexture1D:
+	var key := "ramp" + str(colors)
+	if _cache.has(key):
+		return _cache[key]
 	var g := Gradient.new()
 	var offsets := PackedFloat32Array()
 	for i in colors.size():
@@ -65,15 +69,21 @@ func _ramp(colors: Array) -> GradientTexture1D:
 	g.colors = PackedColorArray(colors)
 	var t := GradientTexture1D.new()
 	t.gradient = g
+	_cache[key] = t
 	return t
 
 
 func _curve(points: Array) -> CurveTexture:
+	var key := "curve" + str(points)
+	if _cache.has(key):
+		return _cache[key]
 	var c := Curve.new()
+	c.max_value = 3.0   # default 0..1 would clamp the growth
 	for p: Vector2 in points:
 		c.add_point(p)
 	var t := CurveTexture.new()
 	t.curve = c
+	_cache[key] = t
 	return t
 
 
@@ -108,6 +118,8 @@ func _build(radius: float, energy: bool) -> void:
 	add_child(light)
 	var fade := create_tween()
 	fade.tween_property(light, "light_energy", 0.0, 0.45).set_ease(Tween.EASE_OUT)
+	fade.tween_callback(light.queue_free)   # don't hold a light slot after the flash
+	var low := GameSettings.quality == GameSettings.QUALITY_LOW
 	# Fireball (or energy burst)
 	var fire := ParticleProcessMaterial.new()
 	fire.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
@@ -122,7 +134,9 @@ func _build(radius: float, energy: bool) -> void:
 	fire.scale_curve = _curve([Vector2(0, 0.4), Vector2(0.25, 1.0), Vector2(1, 1.3)])
 	fire.color_ramp = _ramp([Color(0.7, 0.9, 1.0, 1.0), Color(0.3, 0.6, 1.0, 0.8), Color(0.1, 0.2, 0.6, 0.0)] if energy
 		else [Color(1.0, 0.95, 0.7, 1.0), Color(1.0, 0.55, 0.12, 0.9), Color(0.6, 0.15, 0.03, 0.5), Color(0.1, 0.08, 0.07, 0.0)])
-	_emitter(26, 0.9, r * 0.9, _billboard("fire", true), fire)
+	fire.angle_min = -180.0
+	fire.angle_max = 180.0
+	_emitter(10 if low else 16, 0.9, r * 0.8, _billboard("fire", true), fire)
 	# Sparks
 	var sparks := ParticleProcessMaterial.new()
 	sparks.direction = Vector3.UP
@@ -131,10 +145,11 @@ func _build(radius: float, energy: bool) -> void:
 	sparks.initial_velocity_max = r * 6.0
 	sparks.gravity = Vector3(0, -14.0, 0)
 	sparks.color_ramp = _ramp([Color(1, 1, 1, 1), Color(0.6, 0.85, 1.0, 1) if energy else Color(1.0, 0.7, 0.3, 1), Color(1, 0.4, 0.1, 0)])
-	_emitter(40, 1.1, 0.12, _billboard("spark", true), sparks)
+	_emitter(20 if low else 32, 1.1, 0.12, _billboard("spark", true), sparks)
 	# Shockwave ring
-	Effects.ring(get_tree(), global_position + Vector3.UP * 0.3, r * 1.3, energy)
-	if energy:
+	if not low:
+		Effects.ring(get_tree(), global_position + Vector3.UP * 0.3, r * 1.3, energy)
+	if energy or low:
 		_finish(1.6)
 		return
 	# Smoke
@@ -150,14 +165,19 @@ func _build(radius: float, energy: bool) -> void:
 	smoke.damping_max = 1.0
 	smoke.scale_curve = _curve([Vector2(0, 0.5), Vector2(1, 2.4)])
 	smoke.color_ramp = _ramp([Color(0.2, 0.18, 0.16, 0.0), Color(0.16, 0.15, 0.14, 0.75), Color(0.25, 0.25, 0.25, 0.0)])
-	var smoke_p := _emitter(14, 3.2, r * 1.1, _billboard("smoke", false), smoke)
+	smoke.angle_min = -180.0
+	smoke.angle_max = 180.0
+	var smoke_p := _emitter(8, 3.2, r * 1.0, _billboard("smoke", false), smoke)
 	smoke_p.explosiveness = 0.7
 	# Debris chunks
-	var chunk := BoxMesh.new()
-	chunk.size = Vector3(0.18, 0.12, 0.22)
-	var chunk_mat := StandardMaterial3D.new()
-	chunk_mat.albedo_color = Color(0.08, 0.07, 0.065)
-	chunk.material = chunk_mat
+	if not _cache.has("chunk"):
+		var box := BoxMesh.new()
+		box.size = Vector3(0.18, 0.12, 0.22)
+		var chunk_mat := StandardMaterial3D.new()
+		chunk_mat.albedo_color = Color(0.08, 0.07, 0.065)
+		box.material = chunk_mat
+		_cache["chunk"] = box
+	var chunk: BoxMesh = _cache["chunk"]
 	var debris := ParticleProcessMaterial.new()
 	debris.direction = Vector3.UP
 	debris.spread = 60.0
@@ -172,5 +192,4 @@ func _build(radius: float, energy: bool) -> void:
 
 
 func _finish(after: float) -> void:
-	await get_tree().create_timer(after).timeout
-	queue_free()
+	get_tree().create_timer(after).timeout.connect(queue_free)

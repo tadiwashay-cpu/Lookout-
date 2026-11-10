@@ -73,25 +73,35 @@ static func _bank(world: World) -> void:
 		lamp.light_energy = 1.4
 		lamp.light_color = Color(1.0, 0.92, 0.8)
 		hall.add_child(lamp)
-	var sign := Label3D.new()
-	sign.text = "FIRST HARBOR BANK"
-	sign.font_size = 72
-	sign.position = o + Vector3(0, 6, -18.2)
-	sign.modulate = Color(0.85, 0.75, 0.45)
-	hall.add_child(sign)
+	var board := Label3D.new()
+	board.text = "FIRST HARBOR BANK"
+	board.font_size = 72
+	board.position = o + Vector3(0, 6, -18.2)
+	board.modulate = Color(0.85, 0.75, 0.45)
+	hall.add_child(board)
 	var inside := o + Vector3(0, 0.3, 0.5)
-	_spot(world, door, "Enter the bank", func(p: PlayerController) -> void: _travel(p, inside, PI))
-	_spot(hall, o + Vector3(0, 0, 1.8), "Leave the bank", func(p: PlayerController) -> void: _travel(p, door + Vector3(0, 0, 2.5), 0.0))
+	_spot(world, door, "Enter the bank", func(p: PlayerController) -> void: _travel(p, inside, 0.0))
+	_spot(hall, o + Vector3(0, 0, 1.8), "Leave the bank", func(p: PlayerController) -> void: _travel(p, door + Vector3(0, 0, 2.5), PI))
 	_spot(hall, o + Vector3(0, 0, -8.6), "Talk to the teller", func(p: PlayerController) -> void: _teller(p))
 
 
+static var _busy := false
+
+
 static func _travel(player: PlayerController, to: Vector3, yaw: float) -> void:
+	if _busy:
+		return
+	_busy = true
 	var hud := player.get_tree().get_first_node_in_group(&"hud") as GameHUD
 	if hud:
 		await hud.fade(true)
-	player.respawn_at_quiet(to, yaw)
-	if hud:
+	# The hall is below the street: move the "fell out of the world" plane.
+	player.kill_y = to.y - 30.0 if to.y < -30.0 else -40.0
+	if is_instance_valid(player):
+		player.respawn_at_quiet(to, yaw)
+	if hud and is_instance_valid(hud):
 		await hud.fade(false)
+	_busy = false
 
 
 static func _teller(player: PlayerController) -> void:
@@ -118,13 +128,13 @@ static func _pawn_shop(world: World) -> void:
 	shop.name = "PawnShop"
 	world.add_child(shop)
 	_box(shop, Vector3(7.0, 0.2, 2.0), front + Vector3(0, 3.4, 0.6), Color(0.55, 0.08, 0.06), false)   # awning
-	var sign := Label3D.new()
-	sign.text = "PAWN  •  GUNS  •  GOLD"
-	sign.font_size = 64
-	sign.position = front + Vector3(0, 4.1, 0.2)
-	sign.modulate = Color(1.0, 0.8, 0.3)
-	sign.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	shop.add_child(sign)
+	var board := Label3D.new()
+	board.text = "PAWN  •  GUNS  •  GOLD"
+	board.font_size = 64
+	board.position = front + Vector3(0, 4.1, 0.2)
+	board.modulate = Color(1.0, 0.8, 0.3)
+	board.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	shop.add_child(board)
 	world.add_label("PAWN", front + Vector3(0, 8, 0), 40, Color(1.0, 0.8, 0.3))
 	_spot(world, front + Vector3(0, 0, 1.2), "Pawn shop", func(p: PlayerController) -> void: _pawn(p))
 	world.pawn_shop_position = front
@@ -151,9 +161,12 @@ static func _pawn(player: PlayerController) -> void:
 		for id: String in WeaponCatalog.shop_ids():
 			var data := WeaponCatalog.get_data(id)
 			if GameSettings.owned_weapons.has(id):
-				rows.append(["Sell %s" % data["name"], "+$%d" % (int(data["price"]) / 2), func() -> void:
-					GameSettings.sell_weapon(id)
-					player.equip(GameSettings.equipped_weapon)])
+				if GameSettings.owned_weapons.size() > 1:
+					rows.append(["Sell %s" % data["name"], "+$%d" % int(int(data["price"]) * 0.5), func() -> void:
+						var before := GameSettings.equipped_weapon
+						GameSettings.sell_weapon(id)
+						if GameSettings.equipped_weapon != before:
+							player.equip(GameSettings.equipped_weapon)])
 			else:
 				rows.append(["Buy %s" % data["name"], "$%d" % int(data["price"]), func() -> void:
 					if GameSettings.buy_weapon(id):
