@@ -210,8 +210,8 @@ func _build_materials() -> void:
 
 func _build_environment() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.36, 0.44, 0.54)
-	sky_material.sky_horizon_color = Color(0.72, 0.68, 0.61)
+	sky_material.sky_top_color = Color(0.2, 0.42, 0.74)
+	sky_material.sky_horizon_color = Color(0.62, 0.74, 0.86)
 	sky_material.ground_horizon_color = Color(0.45, 0.42, 0.38)
 	sky_material.ground_bottom_color = Color(0.18, 0.17, 0.16)
 	var sky := Sky.new()
@@ -223,12 +223,14 @@ func _build_environment() -> void:
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	_env.ambient_light_energy = 0.8
 	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.tonemap_white = 6.0
+	_env.fog_sky_affect = 0.25   # keep the sky blue; fog only softens the distance
 	_env.fog_enabled = true
 	_env.fog_light_color = Color(0.66, 0.65, 0.62)
 	_env.adjustment_enabled = true
-	_env.adjustment_saturation = 0.9
-	_env.adjustment_contrast = 1.05
+	_env.adjustment_saturation = 1.12
+	_env.adjustment_contrast = 1.08
 	var world_env := WorldEnvironment.new()
 	world_env.environment = _env
 	add_child(world_env)
@@ -243,7 +245,7 @@ func _build_environment() -> void:
 func _apply_graphics() -> void:
 	_sun.shadow_enabled = GameSettings.shadows_enabled and _sun.light_energy > 0.1
 	_sun.directional_shadow_max_distance = clampf(GameSettings.view_distance * 0.2, 40.0, 110.0)
-	_env.fog_density = 2.2 / maxf(GameSettings.view_distance, 100.0)
+	_env.fog_density = 1.0 / maxf(GameSettings.view_distance, 100.0)
 	if player:
 		player.camera().far = maxf(GameSettings.view_distance * 1.6, 300.0)
 

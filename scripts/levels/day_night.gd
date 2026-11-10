@@ -17,10 +17,10 @@ var _facade_lit: Array[float] = []
 var _tick := 0.0
 
 const NIGHT_TOP := Color(0.02, 0.03, 0.07)
-const DAY_TOP := Color(0.36, 0.44, 0.54)
+const DAY_TOP := Color(0.2, 0.42, 0.74)
 const NIGHT_HORIZON := Color(0.07, 0.08, 0.12)
 const DUSK_HORIZON := Color(0.86, 0.5, 0.3)
-const DAY_HORIZON := Color(0.72, 0.68, 0.61)
+const DAY_HORIZON := Color(0.62, 0.74, 0.86)
 
 
 func setup() -> void:
@@ -75,7 +75,7 @@ func _apply() -> void:
 	sky.sky_horizon_color = horizon
 	sky.ground_horizon_color = horizon.darkened(0.3)
 	env.ambient_light_energy = lerpf(0.28, 0.8, day)
-	env.fog_light_color = horizon.lerp(Color(0.66, 0.65, 0.62), day * 0.6)
+	env.fog_light_color = horizon.lerp(Color(0.7, 0.78, 0.86), day * 0.6)
 
 	var lamp := world.batcher.materials.get("lamp") as StandardMaterial3D
 	if lamp:
