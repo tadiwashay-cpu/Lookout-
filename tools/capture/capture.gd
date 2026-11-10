@@ -98,7 +98,7 @@ func _measure() -> void:
 		var low := INF
 		for i in r.skeleton.get_bone_count():
 			var bn := r.skeleton.get_bone_name(i)
-			if bn.ends_with("ToeBase") or bn.ends_with("Toe_End") or bn.ends_with("Foot"):
+			if bn.ends_with("ToeBase") or bn.ends_with("Toes") or bn.ends_with("Foot"):
 				low = minf(low, (r.skeleton.global_transform * r.skeleton.get_bone_global_pose(i).origin).y)
 		var model := (r.get_child(0) as Node3D).get_child(0) as Node3D
 		print("   model_y=%.3f base=%.3f lift=%.3f scale=%.3f feet=%d grounded=%s" % [model.position.y, r._model_base_y, r._lift, model.scale.y, r._feet.size(), r.grounded])

@@ -77,24 +77,23 @@ func _ready() -> void:
 	process_priority = 100
 
 
-## Shared clip libraries for the civilian groups (loaded once, reused by
-## every civilian of that group: much less memory than a copy per model).
-static var _shared_clips: Dictionary = {}
+## One animation library for every character. All models are imported
+## through Godot's humanoid retargeter (assets/models/characters/retarget/),
+## so their skeletons share bone names (%GeneralSkeleton) and a normalised
+## rest pose: X Bot's clips play correctly on any of them, no per-model
+## conversion (which is what used to warp hands and knees).
+const CLIP_SOURCE := "res://assets/models/characters/x_bot.glb"
+static var _library: AnimationLibrary
 
 
-static func _civilian_clips(group: String) -> AnimationLibrary:
-	if _shared_clips.has(group):
-		return _shared_clips[group]
-	var scene := load(GameSettings.CIVILIAN_DIR + group + "_casual.glb") as PackedScene
-	var library: AnimationLibrary = null
-	if scene:
-		var carrier := scene.instantiate()
+static func shared_clips() -> AnimationLibrary:
+	if _library == null:
+		var carrier := (load(CLIP_SOURCE) as PackedScene).instantiate()
 		var player := carrier.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		if player and player.has_animation_library(&""):
-			library = player.get_animation_library(&"")
+			_library = player.get_animation_library(&"")
 		carrier.free()
-	_shared_clips[group] = library
-	return library
+	return _library
 
 
 func setup(character_id: String, height: float = 1.8) -> void:
@@ -115,15 +114,20 @@ func setup(character_id: String, height: float = 1.8) -> void:
 	_fit_height(model, height)
 
 	var players := model.find_children("*", "AnimationPlayer", true, false)
-	if players.is_empty() and character_id.begins_with("civ_"):
-		# Mesh-only civilian: borrow its group's clips.
-		var library := _civilian_clips(character_id.substr(0, 5))
-		if library:
-			var player := AnimationPlayer.new()
+	var library := shared_clips()
+	if library:
+		var player: AnimationPlayer
+		if players.is_empty():
+			player = AnimationPlayer.new()
 			player.name = "AnimationPlayer"
 			model.add_child(player)
-			player.add_animation_library(&"", library)
-			players.append(player)
+		else:
+			player = players[0] as AnimationPlayer
+			for lib in player.get_animation_library_list():
+				player.remove_animation_library(lib)
+		player.add_animation_library(&"", library)
+		players.clear()
+		players.append(player)
 	if not players.is_empty():
 		anim = players[0] as AnimationPlayer
 		for clip in LOOPING:
@@ -138,17 +142,17 @@ func setup(character_id: String, height: float = 1.8) -> void:
 				_right_hand = i
 			elif bone.ends_with("LeftHand"):
 				_left_hand = i
-			elif bone.ends_with("RightHandMiddle1"):
+			elif bone.ends_with("RightHandMiddle1") or bone == "RightMiddleProximal":
 				_right_finger = i
 			elif bone.ends_with("Head") and not bone.ends_with("HeadTop_End"):
 				_head = i
 			elif bone.ends_with("LeftFoot") or bone.ends_with("RightFoot"):
 				_feet.append(i)
 				_sole_height.append(0.085)   # ankle joint above the sole (1.8 m person)
-			elif bone.ends_with("LeftToeBase") or bone.ends_with("RightToeBase"):
+			elif bone.ends_with("LeftToeBase") or bone.ends_with("RightToeBase") or bone == "LeftToes" or bone == "RightToes":
 				_feet.append(i)
 				_sole_height.append(0.03)    # ball of the foot
-			elif bone.ends_with("LeftHandMiddle1"):
+			elif bone.ends_with("LeftHandMiddle1") or bone == "LeftMiddleProximal":
 				_left_finger = i
 	if skeleton and not _feet.is_empty():
 		_fit_by_skeleton(model, height)
