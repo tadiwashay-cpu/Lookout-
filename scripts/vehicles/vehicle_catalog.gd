@@ -54,6 +54,18 @@ const STORE_CARS := {
 		"name": "Street King GT", "price": 9000, "paint": Color(0.55, 0.03, 0.04), "tune": {"top_speed": 78.0, "accel": 8.6}, "unlock": 3},
 	"night_runner": {"model": "sport", "rank": "S", "mass": 1180.0, "drive": "awd", "store": true,
 		"name": "Night Runner", "price": 15000, "paint": Color(0.04, 0.04, 0.05), "tune": {"top_speed": 84.0, "accel": 9.2, "grip": 4.2}, "unlock": 6},
+	# Original supercars (tools/make_supercars.py), styled after five classic
+	# body types: roadster, front-engine GT, grand tourer, mid-engine, wedge.
+	"spyder_rs": {"model": "spyder_rs", "rank": "S", "mass": 1350.0, "drive": "rwd", "store": true,
+		"name": "Spyder RS", "price": 18000, "paint": Color(0.42, 0.44, 0.47), "tune": {"top_speed": 76.0, "accel": 8.4, "grip": 4.3, "steer": 0.64}},
+	"aurora_gt": {"model": "aurora_gt", "rank": "S", "mass": 1550.0, "drive": "rwd", "store": true,
+		"name": "Aurora GT", "price": 22000, "paint": Color(0.95, 0.38, 0.08), "tune": {"top_speed": 82.0, "accel": 8.6}, "unlock": 2},
+	"regal_gt": {"model": "regal_gt", "rank": "S", "mass": 2200.0, "drive": "awd", "store": true,
+		"name": "Regal GT", "price": 26000, "paint": Color(0.62, 0.05, 0.06), "tune": {"top_speed": 86.0, "accel": 8.2, "health": 1300.0}, "unlock": 3},
+	"strix_v12": {"model": "strix_v12", "rank": "S", "mass": 1600.0, "drive": "awd", "store": true,
+		"name": "Strix V12", "price": 30000, "paint": Color(0.25, 0.75, 0.12), "tune": {"top_speed": 92.0, "accel": 9.8, "grip": 4.4}, "unlock": 5},
+	"vortex_rs": {"model": "vortex_rs", "rank": "S", "mass": 1400.0, "drive": "rwd", "store": true,
+		"name": "Vortex RS", "price": 40000, "paint": Color(0.08, 0.45, 0.9), "tune": {"top_speed": 95.0, "accel": 10.2, "grip": 4.6}, "unlock": 7},
 }
 
 const POLICE_PAINT := {

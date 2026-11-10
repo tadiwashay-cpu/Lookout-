@@ -4,7 +4,7 @@
 // rubber, grilles and lights (low saturation) keep their original colour.
 shader_type spatial;
 
-uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D albedo_tex : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;   // untextured models (procedural supercars) = plain paint
 uniform sampler2D orm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
 uniform bool has_orm = false;
 uniform vec4 paint_color : source_color = vec4(1.0);

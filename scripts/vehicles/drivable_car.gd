@@ -110,6 +110,8 @@ func _ready() -> void:
 		_build_light_bar()
 	elif _own_lights and not is_police:
 		_setup_head_tail_lights()
+	if _lamp_materials.is_empty() and not is_police:
+		_setup_optics_lamps()   # lamps painted on the body ("Optics" materials)
 	elif _own_lights:
 		_lights_material = StandardMaterial3D.new()
 		_lights_material.emission_enabled = true
@@ -434,6 +436,23 @@ func _setup_head_tail_lights() -> void:
 		lamp.emission = lamp.albedo_color
 		lamp.emission_energy_multiplier = 0.0
 		_own_lights.set_surface_override_material(s, lamp)
+		_lamp_materials.append(lamp)
+
+
+func _setup_optics_lamps() -> void:
+	var body_mesh := find_child("Body", true, false) as MeshInstance3D
+	if body_mesh == null or body_mesh.mesh == null:
+		return
+	for s in body_mesh.mesh.get_surface_count():
+		var base := body_mesh.mesh.surface_get_material(s) as StandardMaterial3D
+		if base == null or not base.resource_name.begins_with("Optics"):
+			continue
+		var lamp := base.duplicate() as StandardMaterial3D
+		lamp.emission_enabled = true
+		# Front lamps glow white, rear lamps red (models that don't say: white).
+		lamp.emission = Color(1.0, 0.1, 0.06) if base.resource_name.contains("Rear") else Color(1.0, 0.95, 0.85)
+		lamp.emission_energy_multiplier = 0.0
+		body_mesh.set_surface_override_material(s, lamp)
 		_lamp_materials.append(lamp)
 
 
