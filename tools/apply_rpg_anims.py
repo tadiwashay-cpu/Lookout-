@@ -106,6 +106,55 @@ def ground_speeds(rm_path):
     return speeds
 
 
+KNEE_FORWARD = 0.8    # 0 = the pack's knock-kneed stance, 1 = knees straight ahead
+HIP_KEEP = 0.5        # keep half of the pack's deep crouch (hips drop); feet stay planted
+
+
+def adjust_hip_offset(offset):
+    return Vector((offset.x, offset.y, offset.z * HIP_KEEP if offset.z < 0 else offset.z))
+
+
+def solve_legs(frames, fi, mapped, tbones, mw, rig):
+    """Two-bone leg solve on the target's bone lengths: the foot lands where
+    the clip puts it (relative to the hips), but the knee is steered toward
+    the front so the stylised inward-knee stance doesn't look twisted."""
+    pre = "mixamorig:"
+    out = {}
+    forward = Vector((0, -1, 0))   # Mixamo rigs face -Y in Blender
+    for side in ("Left", "Right"):
+        up, low, foot = pre + side + "UpLeg", pre + side + "Leg", pre + side + "Foot"
+        if not all(b in mapped and b in tbones for b in (up, low, foot)):
+            continue
+        H = frames[mapped[up]][fi].translation
+        K = frames[mapped[low]][fi].translation
+        F = frames[mapped[foot]][fi].translation
+        P = frames[mapped[pre + "Hips"]][fi].translation
+        scale = mw.to_3x3().to_scale()
+        lt = ((tbones[low].head_local - tbones[up].head_local) * scale.x).length
+        lc = ((tbones[foot].head_local - tbones[low].head_local) * scale.x).length
+        # Hips raised (less crouch), thigh joint follows them, foot stays planted.
+        hips_t = rig["tgt_hips"] + adjust_hip_offset(P - rig["src_hips"]) * rig["scale"]
+        thigh_t = hips_t + (H - P) * rig["scale"]
+        foot_t = rig["tgt_hips"] + (F - rig["src_hips"]) * rig["scale"]
+        d = foot_t - thigh_t
+        dist = min(d.length, (lt + lc) * 0.999)
+        if dist < 1e-4:
+            continue
+        axis = d.normalized()
+        d = axis * dist
+        bend = (K - H) - axis * (K - H).dot(axis)
+        fwd = forward - axis * forward.dot(axis)
+        if bend.length < 1e-4:
+            bend = fwd
+        pole = bend.normalized().lerp(fwd.normalized(), KNEE_FORWARD).normalized()
+        a = (lt * lt - lc * lc + dist * dist) / (2.0 * dist)
+        h = max(lt * lt - a * a, 0.0) ** 0.5
+        knee = axis * a + pole * h
+        out[up] = knee
+        out[low] = d - knee
+    return out
+
+
 def main(src_path, rm_path, char_path, out_path):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.render.fps = FPS
@@ -141,6 +190,7 @@ def main(src_path, rm_path, char_path, out_path):
             b0 = tbones[pre + short]
             d = (tbones[pre + child].head_local - b0.head_local).normalized()
             local_dir[pre + short] = b0.matrix_local.to_3x3().inverted() @ d
+    rig_info = {"src_hips": src_rest["B_Pelvis"].translation, "tgt_hips": tgt_rest[pre + "Hips"].translation, "scale": scale}
     for pb in tgt.pose.bones:
         pb.rotation_mode = 'QUATERNION'
     json_out = {}
@@ -170,6 +220,7 @@ def main(src_path, rm_path, char_path, out_path):
         use_action(tgt, action)
         prev = {}
         for fi in range(n):
+            leg_wants = solve_legs(frames, fi, mapped, tbones, mw, rig_info)
             pose = {}
             for bone in tbones:   # parents before children
                 name, parent = bone.name, bone.parent
@@ -182,7 +233,7 @@ def main(src_path, rm_path, char_path, out_path):
                 s_now = frames[sname][fi]
                 child = AIM.get(short)
                 if child and pre + child in mapped and name in local_dir:
-                    want = frames[mapped[pre + child]][fi].translation - s_now.translation
+                    want = leg_wants.get(name) or (frames[mapped[pre + child]][fi].translation - s_now.translation)
                     want_arm = (mw_inv.to_3x3() @ want).normalized()
                     current = base.to_3x3() @ Vector((0, 1, 0))
                     # keep the source's twist about the limb as well
@@ -195,7 +246,7 @@ def main(src_path, rm_path, char_path, out_path):
                     rot = mw_inv.to_3x3().normalized() @ delta @ tgt_rest[name].to_3x3().normalized()
                 translation = base.translation
                 if short == "Hips":
-                    offset = (s_now.translation - src_rest[sname].translation) * scale
+                    offset = adjust_hip_offset(s_now.translation - src_rest[sname].translation) * scale
                     translation = mw_inv @ (tgt_rest[name].translation + offset)
                 matrix = Matrix.Translation(translation) @ rot.to_4x4()
                 pose[name] = matrix
