@@ -59,7 +59,7 @@ var quality: int = QUALITY_MEDIUM
 var render_scale: float = 0.85
 var shadows_enabled: bool = true
 var view_distance: float = 350.0
-var fps_cap: int = 30
+var fps_cap: int = 60   # 30 judders against 60/120 Hz screens when driving fast
 ## Performance overlay (Debug Menu add-on): 0 off, 1 FPS only, 2 full graphs.
 var perf_overlay: int = 0
 var day_length_minutes: float = 16.0

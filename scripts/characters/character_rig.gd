@@ -20,7 +20,7 @@ const LOOPING: Array[StringName] = [
 ## Foot speed of each loop (m/s at 1.8 m tall) so feet don't slide.
 ## RPG pack values measured on its root-motion clips, scaled from its 2.35 m rig.
 const GROUND_SPEED := {
-	&"walk": 2.4, &"walk_back_unarmed": 2.36, &"run_unarmed": 4.78, &"run_back": 4.1, &"sprint": 7.7,
+	&"walk": 1.35, &"walk_back_unarmed": 2.36, &"run_unarmed": 4.78, &"run_back": 4.1, &"sprint": 7.7,
 	&"strafe_left_unarmed": 2.29, &"strafe_right_unarmed": 2.21, &"strafe_left_run": 4.17, &"strafe_right_run": 4.16,
 	&"pistol_walk": 1.59, &"shotgun_walk": 1.55,
 }
@@ -176,6 +176,7 @@ func set_weapon(id: String) -> void:
 	var data := WeaponCatalog.get_data(id)
 	weapon_class = data["class"]
 	weapon = (load(data["path"]) as PackedScene).instantiate() as Node3D
+	_finish_gun(weapon)
 	weapon.top_level = true
 	weapon.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # placed from the smoothed hand
 	add_child(weapon)
@@ -207,12 +208,40 @@ func _keep_feet_on_ground(delta: float) -> void:
 	for foot in _feet:
 		lowest = minf(lowest, skeleton.get_bone_global_pose(foot).origin.y)
 	# Skeleton space -> how far below its rest height the lowest ankle is.
+	# Positive = feet sank below the floor (lift), negative = feet float
+	# (pull down). Big negatives are jumps/kicks: leave those alone.
 	var sink := (_foot_rest_y - lowest) * skeleton.global_basis.get_scale().y
-	var want := clampf(sink, 0.0, 0.35)
+	var want := clampf(sink, -0.18, 0.3) if sink > -0.25 else 0.0
 	_lift = lerpf(_lift, want, clampf(delta * 12.0, 0.0, 1.0))
 	var holder := get_child(0) as Node3D
 	if holder and holder.get_child_count() > 0:
 		(holder.get_child(0) as Node3D).position.y = _model_base_y + _lift
+
+
+## The gun pack has no textures (flat 0.8 grey). Give the parts real finishes:
+## black metal, gunmetal, polymer, and a wood stock on wooden-furniture guns.
+static var _gun_mats: Array[StandardMaterial3D] = []
+
+
+func _finish_gun(root: Node) -> void:
+	if _gun_mats.is_empty():
+		for spec in [[Color(0.035, 0.035, 0.038), 0.9, 0.35], [Color(0.16, 0.165, 0.17), 0.85, 0.3],
+				[Color(0.07, 0.07, 0.065), 0.0, 0.7], [Color(0.3, 0.17, 0.08), 0.0, 0.6]]:
+			var m := StandardMaterial3D.new()
+			m.albedo_color = spec[0]
+			m.metallic = spec[1]
+			m.roughness = spec[2]
+			_gun_mats.append(m)
+	var wood := weapon_id in ["ak47"]
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		for s in mesh.mesh.get_surface_count():
+			var base := mesh.mesh.surface_get_material(s) as BaseMaterial3D
+			if base and base.albedo_texture == null and base.albedo_color.r > 0.7 and base.albedo_color.g > 0.7:
+				var pick := s % 3
+				if wood and s == 1:
+					pick = 3
+				mesh.set_surface_override_material(s, _gun_mats[pick])
 
 
 func _palm(hand: int, finger: int) -> Vector3:

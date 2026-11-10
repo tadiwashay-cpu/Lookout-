@@ -167,7 +167,7 @@ func _build_from_model() -> void:
 		wheel.wheel_rest_length = 0.16
 		# Attach the suspension above the hub so the resting wheel sits where
 		# the model drew it (otherwise the car squats and wheels look sunken).
-		wheel.position = to_local(wheel_mesh.global_position) + Vector3.UP * 0.13
+		wheel.position = to_local(wheel_mesh.global_position) + Vector3.UP * 0.18
 		wheel.suspension_travel = 0.26
 		wheel.suspension_stiffness = 90.0   # ~2.7 cm sag at rest, stays off the bump stops
 		wheel.suspension_max_force = float(data["mass"]) * 14.0
@@ -572,7 +572,7 @@ func _update_lamps() -> void:
 		return
 	_lamps_on = on
 	for lamp in _lamp_materials:
-		lamp.emission_energy_multiplier = on * 4.0
+		lamp.emission_energy_multiplier = on * 9.0
 	for spot in _headlights:
 		spot.visible = on > 0.3
 
@@ -585,9 +585,10 @@ func _add_headlights() -> void:
 		var spot := SpotLight3D.new()
 		spot.position = Vector3(side * _body_aabb.size.x * 0.32, _body_aabb.position.y + _body_aabb.size.y * 0.4, front_z)
 		spot.rotation = Vector3(deg_to_rad(-6.0), PI, 0.0)   # SpotLight shines along -Z; flip to face +Z
-		spot.spot_range = 38.0
-		spot.spot_angle = 32.0
-		spot.light_energy = 3.0
+		spot.spot_range = 65.0
+		spot.spot_angle = 38.0
+		spot.light_energy = 9.0
+		spot.spot_attenuation = 0.6
 		spot.light_color = Color(1.0, 0.94, 0.82)
 		spot.shadow_enabled = false
 		spot.visible = false
@@ -835,7 +836,9 @@ func _process(delta: float) -> void:
 	_update_speed_fx(speed)
 	match cam_view:
 		CamView.HOOD, CamView.INTERIOR:
-			var seat := Vector3(0.36, 1.12, 0.1) if cam_view == CamView.INTERIOR else Vector3(0.0, _roof_height * 0.82, _body_aabb.end.z * 0.2)
+			# Hood: just above the bonnet, ahead of the windscreen (only the bonnet in view).
+			var front := -_body_aabb.position.z if _body_aabb.size != Vector3.ZERO else 2.0
+			var seat := Vector3(0.36, 1.12, 0.1) if cam_view == CamView.INTERIOR else Vector3(0.0, _roof_height * 0.84, front * 0.12)
 			_camera.global_position = xf * seat
 			_camera.global_basis = xf.basis.rotated(xf.basis.y, PI + _cam_yaw_offset)
 			_cam_yaw_offset = move_toward(_cam_yaw_offset, 0.0, delta * 0.8)
@@ -846,12 +849,15 @@ func _process(delta: float) -> void:
 		_cam_yaw_offset = move_toward(_cam_yaw_offset, 0.0, delta * 0.5)
 	var car_yaw := atan2(xf.basis.z.x, xf.basis.z.z)
 	var yaw := car_yaw + _cam_yaw_offset
-	var base := 4.6 if cam_view == CamView.CLOSE else 7.5
-	var distance := base + clampf(speed * 0.05, 0.0, 2.2)
-	var pitch := _cam_pitch if free else (0.2 if cam_view == CamView.CLOSE else 0.3)
+	var close := cam_view == CamView.CLOSE
+	var distance := 3.6 if close else 7.5 + clampf(speed * 0.05, 0.0, 2.2)
+	var pitch := _cam_pitch if free else (0.14 if close else 0.3)
 	var back := Vector3(sin(yaw), 0.0, cos(yaw))
-	var target := xf.origin - back * distance * cos(pitch) + Vector3.UP * (1.1 + distance * sin(pitch))
-	_camera.global_position = _camera.global_position.lerp(target, clampf(delta * (12.0 if free else 7.0), 0.0, 1.0))
+	var target := xf.origin - back * distance * cos(pitch) + Vector3.UP * (0.9 + distance * sin(pitch))
+	if close:
+		_camera.global_position = target   # locked to the car: no swing, no lag
+	else:
+		_camera.global_position = _camera.global_position.lerp(target, clampf(delta * (12.0 if free else 7.0), 0.0, 1.0))
 	_camera.look_at(xf.origin + Vector3.UP * 1.0, Vector3.UP)
 	# Faster feel: widen the view with speed.
 	_camera.fov = lerpf(_camera.fov, 72.0 + clampf(speed - 15.0, 0.0, 45.0) * 0.35, clampf(delta * 3.0, 0.0, 1.0))

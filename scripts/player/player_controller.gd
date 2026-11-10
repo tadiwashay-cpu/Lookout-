@@ -1084,7 +1084,7 @@ func _apply_camera_mode(mode: int, instant: bool = false) -> void:
 	var target_offset := 0.0 if first_person else shoulder_offset
 	# True first person: keep the body (arms + gun in view), hide only the head.
 	rig.first_person = first_person
-	_camera.position.z = -0.14 if first_person else 0.0
+	_camera.position.z = -0.3 if first_person else 0.0   # ahead of the chest, not inside it
 	if instant:
 		_spring.spring_length = target_length
 		_spring.position.x = target_offset

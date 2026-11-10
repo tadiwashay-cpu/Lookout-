@@ -12,15 +12,16 @@ with the RPG pack, retargeted onto the Mixamo-named skeleton:
 Also writes OUT.json with clip length and ground speed (measured on the
 root-motion version) so the game can match foot speed.
 """
-import bpy, json, os, sys
+import bpy, json, math, os, sys
 from mathutils import Matrix, Quaternion, Vector
 
 FPS = 30
-KEEP = {"pistol_idle", "pistol_walk", "pistol_fire", "pistol_reload", "shotgun_idle", "shotgun_walk"}
+KEEP = {"pistol_idle", "pistol_walk", "pistol_fire", "pistol_reload", "shotgun_idle", "shotgun_walk",
+        "idle_unarmed"}   # calm standing idle (the pack's own idle is a fighting stance)
 
 # our clip name <- RPG action name (without the "Unarmed" prefix)
 CLIPS = {
-    "idle_unarmed": "Idle", "fight_idle": "IdleAlert1",
+    "fight_idle": "IdleAlert1",
     "walk": "StrafeForward", "walk_back_unarmed": "StrafeBackward",
     "strafe_left_unarmed": "StrafeLeft", "strafe_right_unarmed": "StrafeRight",
     "run_unarmed": "RunForward", "run_back": "RunBackward",
@@ -155,7 +156,114 @@ def solve_legs(frames, fi, mapped, tbones, mw, rig):
     return out
 
 
-def main(src_path, rm_path, char_path, out_path):
+def mocap_walk(path, tgt, tbones, mw, pre="mixamorig:"):
+    """One clean gait cycle from a long Mixamo mocap take, in place, as 'walk'."""
+    before = set(bpy.data.objects)
+    acts_before = set(bpy.data.actions)
+    bpy.ops.import_scene.fbx(filepath=path)
+    new = [o for o in bpy.data.objects if o not in before]
+    src = next(o for o in new if o.type == 'ARMATURE')
+    action = next(a for a in bpy.data.actions if a not in acts_before)
+    names = [b.name for b in src.data.bones if b.name in tbones]
+    # Some Mixamo exports make the Hips the armature object itself: then the
+    # hip motion is the object's own animation, so read its matrix every frame.
+    hips_is_object = pre + "Hips" not in src.data.bones
+    src.animation_data_create()
+    src.animation_data.action = None
+    bpy.context.view_layer.update()
+    rest_mw = src.matrix_world.copy()
+    rest = {b.name: rest_mw @ b.matrix_local for b in src.data.bones}
+    if hips_is_object:
+        rest[pre + "Hips"] = rest_mw.copy()
+    use_action(src, action)
+    start_f, end_f = action.frame_range
+    n = int(round(end_f - start_f)) + 1
+    frames = {b: [] for b in names}
+    if hips_is_object:
+        frames[pre + "Hips"] = []
+    for f in range(n):
+        bpy.context.scene.frame_set(int(start_f) + f)
+        mwf = src.matrix_world.copy()
+        for b in names:
+            frames[b].append(mwf @ src.pose.bones[b].matrix)
+        if hips_is_object:
+            frames[pre + "Hips"].append(mwf)
+    # Find the cycle: the frame after `start` whose leg pose best matches it.
+    legs = [pre + b for b in ("LeftUpLeg", "LeftLeg", "RightUpLeg", "RightLeg")]
+    def pose_key(i):
+        hip_inv = frames[pre + "Hips"][i].to_3x3().inverted()
+        return [hip_inv @ frames[b][i].to_3x3() for b in legs if b in frames]
+    start = min(60, n // 4)
+    ref = pose_key(start)
+    best, period = 1e9, 30
+    for p in range(22, min(70, n - start - 1)):
+        k = pose_key(start + p)
+        err = sum((a.to_quaternion().rotation_difference(b.to_quaternion()).angle) for a, b in zip(ref, k))
+        if err < best:
+            best, period = err, p
+    clip_frames = {b: v[start:start + period + 1] for b, v in frames.items()}
+    # The take may walk along any axis: turn the cycle so the hips face the
+    # same way as in the rest pose (Mixamo rigs face -Y in Blender).
+    hips_rest = rest[pre + "Hips"].to_3x3().normalized()
+    heading = Vector()
+    for m in clip_frames[pre + "Hips"]:
+        f = (m.to_3x3().normalized() @ hips_rest.inverted()) @ Vector((0, -1, 0))
+        heading += Vector((f.x, f.y, 0))
+    yaw = math.atan2(heading.x, -heading.y) + math.pi
+    turn = Matrix.Rotation(yaw, 4, 'Z')
+    pivot = clip_frames[pre + "Hips"][0].translation.copy()
+    pivot.z = 0.0
+    shift = Matrix.Translation(pivot) @ turn @ Matrix.Translation(-pivot)
+    clip_frames = {b: [shift @ m for m in v] for b, v in clip_frames.items()}
+    print("@walk heading fix", round(math.degrees(yaw), 1), "deg")
+    hips = clip_frames[pre + "Hips"]
+    travel = (hips[-1].translation - hips[0].translation)
+    travel.z = 0.0
+    tgt_rest = {b.name: mw @ b.matrix_local for b in tbones}
+    scale = tgt_rest[pre + "Hips"].translation.z / max(rest[pre + "Hips"].translation.z, 1e-4)
+    mw_inv = mw.inverted()
+    act = bpy.data.actions.new("walk")
+    act.use_fake_user = True
+    use_action(tgt, act)
+    prev = {}
+    for fi in range(period + 1):
+        pose = {}
+        drift = travel * (fi / period)
+        for bone in tbones:
+            name, parent = bone.name, bone.parent
+            base = (pose[parent.name] @ parent.matrix_local.inverted() @ bone.matrix_local) if parent else bone.matrix_local.copy()
+            if name not in clip_frames:
+                pose[name] = base
+                continue
+            s_now = clip_frames[name][fi]
+            delta = s_now.to_3x3().normalized() @ rest[name].to_3x3().normalized().inverted()
+            rot = mw_inv.to_3x3().normalized() @ delta @ tgt_rest[name].to_3x3().normalized()
+            translation = base.translation
+            if name == pre + "Hips":
+                offset = (s_now.translation - drift - hips[0].translation) * scale
+                offset.z = (s_now.translation.z - rest[name].translation.z) * scale
+                translation = mw_inv @ (tgt_rest[name].translation + Vector((offset.x * 0.3, offset.y * 0.3, offset.z)))
+            matrix = Matrix.Translation(translation) @ rot.to_4x4()
+            pose[name] = matrix
+            q = (base.inverted() @ matrix).to_quaternion()
+            if name in prev:
+                q.make_compatible(prev[name])
+            prev[name] = q
+            pb = tgt.pose.bones[name]
+            pb.rotation_quaternion = q
+            pb.keyframe_insert("rotation_quaternion", frame=fi)
+            if name == pre + "Hips":
+                pb.location = (base.inverted() @ matrix).translation
+                pb.keyframe_insert("location", frame=fi)
+    tgt.animation_data.action = None
+    for o in new:
+        bpy.data.objects.remove(o, do_unlink=True)
+    speed = travel.length * scale / (period / FPS)
+    print("@walk cycle", period, "frames, match", round(best, 3), "speed", round(speed, 2))
+    return act, round(period / FPS, 3), round(speed, 3)
+
+
+def main(src_path, rm_path, char_path, out_path, walk_path=None):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.render.fps = FPS
     speeds = ground_speeds(rm_path)
@@ -270,6 +378,16 @@ def main(src_path, rm_path, char_path, out_path):
         pb.location = Vector()
     for o in src_objs:
         bpy.data.objects.remove(o, do_unlink=True)
+    if walk_path:
+        for a in [a for a in made if a.name == "walk"]:
+            made.remove(a)
+            bpy.data.actions.remove(a)
+        walk, length, speed = mocap_walk(walk_path, tgt, tbones, mw)
+        made.append(walk)
+        json_out["walk"] = {"length": length, "ground_speed": speed, "loop": True}
+        for pb in tgt.pose.bones:
+            pb.rotation_quaternion = Quaternion()
+            pb.location = Vector()
     for action in made + kept:
         track = tgt.animation_data.nla_tracks.new()
         track.name = action.name
@@ -288,4 +406,4 @@ def main(src_path, rm_path, char_path, out_path):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:5])
+    main(*sys.argv[1:6])
