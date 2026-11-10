@@ -109,6 +109,7 @@ func _spawn_bot(index: int) -> void:
 	bot.team = "brawler_%d" % index        # everyone for themselves
 	bot.display_name = names[index % names.size()]
 	bot.melee_only = true                  # must be set before _ready
+	bot.can_surge = true
 	bot.melee_damage = _rng.randf_range(9.0, 13.0)
 	bot.sight_range = ARENA_RADIUS * 2.5
 	bot.tint_colors = [Color(0.55, 0.4, 0.3), palette[index % palette.size()]]
@@ -118,6 +119,7 @@ func _spawn_bot(index: int) -> void:
 	world.add_child(bot)
 	bot.died.connect(_on_bot_died.bind(index))
 	_names[bot.bot_id] = bot.display_name
+	GameMode.bot_names[bot.bot_id] = bot.display_name
 	_kos[bot.bot_id] = _kos.get(bot.bot_id, 0)
 	if index < _bots.size():
 		_bots[index] = bot

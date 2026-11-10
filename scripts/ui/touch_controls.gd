@@ -99,6 +99,7 @@ func _layout() -> void:
 		_add(&"move_forward", "GAS", br + Vector2(-190, -190) * k, 100.0)
 		_add(&"move_back", "REV", br + Vector2(-410, -130) * k, 78.0)
 		_add(&"jump", "BRAKE", br + Vector2(-160, -420) * k, 74.0)
+		_add(&"surge", "NITRO", br + Vector2(-600, -160) * k, 66.0)
 		var locked := player and player.current_vehicle and player.current_vehicle.locked
 		if locked:
 			_add(&"grenade", "NADE", br + Vector2(-380, -340) * k, 66.0)

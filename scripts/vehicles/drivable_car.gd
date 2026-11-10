@@ -67,6 +67,9 @@ var _fire: GPUParticles3D
 ## Arcade handling: grip assist when driving straight, a held drift state
 ## after a handbrake flick (rear steps out, momentum is kept).
 var drifting := false
+## Nitro: 0..1. Drifting and high speed fill it; SURGE/NITRO burns it.
+var nitro := 0.35
+var nitro_on := false
 const GRIP_ASSIST := 3.2      # how hard sideways sliding is cancelled (1/s)
 const DRIFT_GRIP := 0.55      # assist left while drifting
 const DRIFT_YAW_MAX := 2.3    # rad/s spin cap so you don't loop
@@ -684,6 +687,19 @@ func _drive(delta: float, throttle: float, reverse: float, steer_input: float, h
 	var speed := forward_speed()
 	var top_speed: float = data["top_speed"] * (0.55 if _slow_timer > 0.0 else 1.0) * ai_top_speed_scale
 	var accel: float = data["accel"] * (0.4 if _slow_timer > 0.0 else 1.0)
+	# Nitro (driver only): fills while drifting or flat out, burns for a shove.
+	if driver:
+		var want := Input.is_action_pressed(&"surge") and throttle > 0.1
+		nitro_on = want and nitro > 0.02 and (nitro_on or nitro > 0.15)
+		if nitro_on:
+			nitro = maxf(nitro - delta / 3.0, 0.0)
+			accel *= 1.9
+			top_speed *= 1.25
+		else:
+			var gain := 0.16 if drifting else (0.03 if absf(forward_speed()) > top_speed * 0.8 else 0.0)
+			nitro = minf(nitro + gain * delta, 1.0)
+	else:
+		nitro_on = false
 	var decel: float = data["decel"]
 	var forward := global_basis.z
 	var grounded := 0
@@ -817,7 +833,7 @@ func _add_light_trails() -> void:
 
 
 func _update_light_trails() -> void:
-	var fast := absf(forward_speed()) > TRAIL_SPEED
+	var fast := absf(forward_speed()) > TRAIL_SPEED or nitro_on
 	for trail in _light_trails:
 		if trail.visible != fast:
 			trail.visible = fast
@@ -877,7 +893,9 @@ func _process(delta: float) -> void:
 		_camera.global_position = _camera.global_position.lerp(target, clampf(delta * (12.0 if free else 7.0), 0.0, 1.0))
 	_camera.look_at(xf.origin + Vector3.UP * 1.0, Vector3.UP)
 	# Faster feel: widen the view with speed.
-	_camera.fov = lerpf(_camera.fov, 72.0 + clampf(speed - 15.0, 0.0, 45.0) * 0.35, clampf(delta * 3.0, 0.0, 1.0))
+	_camera.fov = lerpf(_camera.fov, 72.0 + clampf(speed - 15.0, 0.0, 45.0) * 0.35 + (9.0 if nitro_on else 0.0), clampf(delta * 3.0, 0.0, 1.0))
+	if nitro_on:
+		_cam_shake = maxf(_cam_shake, 0.12)
 
 
 func _set_light_bar(energy: float) -> void:

@@ -80,6 +80,9 @@ func _draw_tacho(car: DrivableCar) -> void:
 	draw_arc(center, radius, start, start + sweep, 48, Color(1, 1, 1, 0.25), 6.0)
 	draw_arc(center, radius, start + sweep * 0.8, start + sweep, 12, Color(1, 0.2, 0.15, 0.8), 6.0)   # redline
 	draw_arc(center, radius, start, start + sweep * _rpm, 48, Color(1, 0.62, 0.2), 10.0)
+	# Nitro: inner blue arc, bright while burning.
+	draw_arc(center, radius - 22.0, start, start + sweep, 32, Color(1, 1, 1, 0.1), 6.0)
+	draw_arc(center, radius - 22.0, start, start + sweep * car.nitro, 32, Color(0.5, 0.9, 1.0) if car.nitro_on else Color(0.25, 0.6, 1.0), 6.0)
 	for i in 9:
 		var a := start + sweep * i / 8.0
 		draw_line(center + Vector2.from_angle(a) * (radius - 18), center + Vector2.from_angle(a) * (radius - 4), Color(1, 1, 1, 0.7), 3.0)

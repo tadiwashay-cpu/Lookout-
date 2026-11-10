@@ -17,6 +17,12 @@ var _time := 0.0
 var _robbers_alive: Dictionary = {}
 var _zone_ring: MeshInstance3D
 var _sent_escape := false
+## Phase 1: robbers crack the vault at the bank (stand by it). Phase 2: run.
+const CRACK_TIME := 14.0
+const CRACK_RADIUS := 7.0
+var _crack := 0.0
+var _loot := false
+var _crack_sync := 0.0
 
 
 func begin() -> void:
@@ -45,9 +51,12 @@ func begin() -> void:
 		_spawn_solo_police()
 	hud().show_banner("ROBBERS VS POLICE", 2.5)
 	if _team == "robbers":
-		hud().show_hint("You're a ROBBER. Get to the extraction point at the %s!" % _extract_region)
+		hud().show_hint("You're a ROBBER. Crack the vault at the bank, then escape to the %s!" % _extract_region)
 	else:
-		hud().show_hint("You're POLICE. Stop the robbers before they reach the %s." % _extract_region)
+		hud().show_hint("You're POLICE. Stop the robbers at the bank, or before they reach the %s." % _extract_region)
+	_zone_ring.visible = false   # extraction opens once the cash is out
+	world.add_label("VAULT", world.bank_position + Vector3.UP * 3.0, 64, Color(1.0, 0.85, 0.4))
+	player().draw_weapon()
 
 
 ## Solo practice: officers on foot from the precinct plus Crown Vic pursuit.
@@ -95,10 +104,19 @@ func _process(delta: float) -> void:
 		return
 	_time += delta
 	var left := maxf(TIME_LIMIT - _time, 0.0)
-	set_status("%s   •   Robbers left %d   •   %d:%02d" % [_team.to_upper(), _robbers_alive.size(), int(left) / 60, int(left) % 60])
+	var phase := "ESCAPE" if _loot else "VAULT %d%%" % int(_crack / CRACK_TIME * 100.0)
+	set_status("%s   •   %s   •   Robbers left %d   •   %d:%02d" % [_team.to_upper(), phase, _robbers_alive.size(), int(left) / 60, int(left) % 60])
 	var p := player()
 	var where := p.current_vehicle.global_position if p.current_vehicle else p.global_position
-	if _team == "robbers" and p.is_alive() and not _sent_escape and where.distance_to(_extract) < EXTRACT_RADIUS:
+	if _team == "robbers" and not _loot and p.is_alive() and p.current_vehicle == null and where.distance_to(world.bank_position) < CRACK_RADIUS:
+		_crack += delta
+		_crack_sync -= delta
+		if _crack_sync <= 0.0:   # teammates and police see the progress
+			_crack_sync = 1.0
+			Net.send_event("heist_crack", {"t": _crack})
+		if _crack >= CRACK_TIME:
+			Net.send_event("heist_loot", {"name": GameSettings.player_name})
+	if _team == "robbers" and _loot and p.is_alive() and not _sent_escape and where.distance_to(_extract) < EXTRACT_RADIUS:
 		_sent_escape = true
 		Net.send_event("heist_escaped", {"name": GameSettings.player_name})
 	if left <= 0.0:
@@ -106,6 +124,16 @@ func _process(delta: float) -> void:
 
 
 func _on_event(kind: String, data: Dictionary) -> void:
+	if kind == "heist_crack":
+		_crack = maxf(_crack, float(data.get("t", 0.0)))   # robbers crack it together
+	elif kind == "heist_loot" and not _loot:
+		_loot = true
+		_crack = CRACK_TIME
+		_zone_ring.visible = true
+		Audio.play("explosion", world.bank_position + Vector3.UP, 0.0)
+		hud().show_banner("VAULT OPEN", 2.0)
+		hud().show_hint("%s has the cash! %s" % [str(data.get("name", "A robber")),
+			"Get to the %s!" % _extract_region if _team == "robbers" else "Cut them off before the %s!" % _extract_region])
 	if kind == "heist_escaped":
 		hud().show_hint("%s escaped with the cash!" % str(data.get("name", "A robber")))
 		_resolve(true)
@@ -128,4 +156,6 @@ func _resolve(robbers_won: bool) -> void:
 
 func minimap_markers() -> Array:
 	var color := Color(0.35, 1.0, 0.5) if _team == "robbers" else Color(1.0, 0.35, 0.3)
+	if not _loot:
+		return [{"pos": world.bank_position, "color": Color(1.0, 0.85, 0.4), "kind": "objective"}]
 	return [{"pos": _extract, "color": color, "kind": "objective"}, {"pos": world.bank_position, "color": Color(0.9, 0.85, 0.5), "kind": "poi"}]

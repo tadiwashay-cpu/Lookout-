@@ -34,7 +34,7 @@ func setup() -> void:
 			_facades.append(material)
 			_facade_lit.append(float((material as ShaderMaterial).get_shader_parameter("lit_chance")))
 	if Session.mode != Session.MODE_STORY:
-		time_of_day = Session.match_rng(3).randf_range(0.3, 0.8)   # every device agrees
+		time_of_day = Session.match_rng(3).randf_range(0.3, 0.68)   # every device agrees
 	_apply()
 
 
@@ -68,13 +68,13 @@ func _apply() -> void:
 	sun.light_color = Color(1.0, 0.62, 0.38).lerp(Color(1.0, 0.92, 0.8), smoothstep(0.05, 0.45, elevation))
 	sun.shadow_enabled = GameSettings.shadows_enabled and day > 0.1
 	_moon.rotation = Vector3(deg_to_rad(-50.0), deg_to_rad(140.0), 0.0)
-	_moon.light_energy = 0.22 * (1.0 - day)
+	_moon.light_energy = 0.55 * (1.0 - day)
 
 	sky.sky_top_color = NIGHT_TOP.lerp(DAY_TOP, day)
 	var horizon := NIGHT_HORIZON.lerp(DAY_HORIZON, day).lerp(DUSK_HORIZON, dusk * 0.8)
 	sky.sky_horizon_color = horizon
 	sky.ground_horizon_color = horizon.darkened(0.3)
-	env.ambient_light_energy = lerpf(0.28, 0.8, day)
+	env.ambient_light_energy = lerpf(0.5, 0.8, day)   # nights stay readable on a phone screen
 	env.fog_light_color = horizon.lerp(Color(0.7, 0.78, 0.86), day * 0.6)
 
 	var lamp := world.batcher.materials.get("lamp") as StandardMaterial3D

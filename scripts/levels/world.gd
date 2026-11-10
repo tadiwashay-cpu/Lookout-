@@ -550,6 +550,10 @@ func _start_mode() -> void:
 	mode.world = self
 	add_child(mode)
 	hud.bind_mode(mode)
+	if Session.mode != Session.MODE_STORY:
+		GameMode.bot_names.clear()
+		Net.player_eliminated.connect(mode.on_elimination_feed)
+		player.spawn_shield = 5.0   # nobody dies in the first seconds of a match
 	mode.begin()
 
 

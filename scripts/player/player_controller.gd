@@ -81,6 +81,9 @@ var nearby_vehicle: DrivableCar
 var nearby_interactable: Interactable
 ## Fell out of the world below this height -> respawn (lowered inside interiors).
 var kill_y := -40.0
+## Seconds of invulnerability left (match start / respawn in multiplayer).
+var spawn_shield := 0.0
+var auto_holster := true
 
 ## Missions/modes switch these.
 var weapons_allowed := true:
@@ -352,7 +355,7 @@ func _physics_process(delta: float) -> void:
 			_holster_timer = HOLSTER_AFTER
 		else:
 			_holster_timer -= delta
-			if _holster_timer <= 0.0:
+			if _holster_timer <= 0.0 and auto_holster:
 				_wants_armed = false
 				_refresh_armed()
 
@@ -423,6 +426,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _tick_timers(delta: float) -> void:
+	spawn_shield = maxf(spawn_shield - delta, 0.0)
 	_fire_cooldown = maxf(_fire_cooldown - delta, 0.0)
 	_grenade_timer = maxf(_grenade_timer - delta, 0.0)
 	_surge_timer = maxf(_surge_timer - delta, 0.0)
@@ -500,6 +504,15 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 		_stance_check = 0.3
 		rig.fight_ready = not is_armed() and (Session.mode == Session.MODE_CLEAN_HANDS or _enemy_within(7.0))
 	rig.play_locomotion(local_right, local_forward)
+
+
+## Hit marker (white = hit, red = that hit dropped them). Not for cars.
+func _hit_feedback(target: Object) -> void:
+	if target is DrivableCar or not target.has_method(&"is_alive"):
+		return
+	var hud_node := get_tree().get_first_node_in_group(&"hud")
+	if hud_node:
+		hud_node.call(&"hit_marker", not target.call(&"is_alive"))
 
 
 ## Screen shake from the world (explosions).
@@ -605,6 +618,7 @@ func _try_fire() -> void:
 			var target = hit["collider"]
 			if target and target.has_method(&"take_hit"):
 				target.take_hit(rifle_damage, direction * 1.5, self, false)
+				_hit_feedback(target)
 				GameSettings.vibrate(8)
 			elif target is RigidBody3D:
 				(target as RigidBody3D).apply_impulse(direction * 3.0, end - (target as Node3D).global_position)
@@ -820,6 +834,7 @@ func _perform_punch() -> void:
 		if target == null or target == self or not target.has_method(&"take_hit"):
 			continue
 		target.take_hit(_attack_damage, forward * (7.0 if _is_finisher() else 2.5), self, _is_finisher())
+		_hit_feedback(target)
 		attack_landed.emit(target, _attack_damage, light_damage.size() if _is_finisher() else _combo_step)
 		landed = true
 		Audio.play("punch_heavy" if _is_finisher() else "punch_light", (target as Node3D).global_position + Vector3.UP)
@@ -880,8 +895,13 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 		damage *= 0.25
 		knockback *= 0.3
 		heavy = false
+	if spawn_shield > 0.0:
+		return
 	health.take_damage(damage, attacker)
 	velocity += knockback
+	var hud_node := get_tree().get_first_node_in_group(&"hud")
+	if hud_node:
+		hud_node.call(&"damage_flash", clampf(damage / 40.0, 0.0, 1.0))
 	if is_armed():
 		_shake = 0.4
 	else:
@@ -979,6 +999,14 @@ func respawn_at_quiet(point: Vector3, yaw: float) -> void:
 	_yaw = yaw
 	_model_yaw = yaw
 	reset_physics_interpolation()
+
+
+## Take the gun out and keep it out (shooter modes).
+func draw_weapon(keep_out: bool = true) -> void:
+	auto_holster = not keep_out
+	_wants_armed = true
+	_holster_timer = HOLSTER_AFTER
+	_refresh_armed()
 
 
 func refill_ammo() -> void:

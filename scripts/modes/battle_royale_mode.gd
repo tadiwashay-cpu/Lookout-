@@ -27,7 +27,14 @@ func begin() -> void:
 	_center = Vector2(p.x, p.z)
 	player().respawn_enabled = false
 	player().lock_camera_mode(GameSettings.FIRST_PERSON)   # FPS-only mode
-	player().refill_grenades(3)
+	# Everyone drops in with a pistol; the good guns are in the crates.
+	player().equip("glock17")
+	player().reserve = player().mag_size * 2
+	player().ammo_changed.emit(player().ammo, player().reserve)
+	player().draw_weapon()
+	player().refill_grenades(1)
+	_spawn_crates()
+	Net.match_event.connect(_on_event)
 	var everyone: Array = Net.players.keys() if Session.networked else [1]
 	for id in everyone:
 		_alive[id] = true
@@ -65,12 +72,73 @@ func _spawn_bots(rng: RandomNumberGenerator) -> void:
 	var regions: Array = world.region_points.keys()
 	for i in BOT_COUNT:
 		var region: String = regions[rng.randi() % regions.size()]
-		var bot := GameMode.make_bot(world, i, "bot_%d" % i, BOT_WEAPONS[i % BOT_WEAPONS.size()], world.random_point_in(region, rng))
-		bot.accuracy = rng.randf_range(0.45, 0.75)
+		var bot_pos := world.random_point_in(region, rng)
+		for attempt in 6:   # never drop a bot right on top of the player
+			if bot_pos.distance_to(player().global_position) > 90.0:
+				break
+			bot_pos = world.random_point_in(regions[rng.randi() % regions.size()], rng)
+		var bot := GameMode.make_bot(world, i, "bot_%d" % i, BOT_WEAPONS[i % BOT_WEAPONS.size()], bot_pos)
+		bot.accuracy = rng.randf_range(0.35, 0.6)
+		bot.damage_scale = 0.5
 		bot.has_objective = true
 		bot.died.connect(_on_bot_died)
 		_alive[bot.bot_id] = true
 		_bots.append(bot)
+
+
+const CRATES := 48
+const CRATE_GUNS := ["mp5k", "uzi", "ak47", "m4a1", "m16a4", "g36", "spas12", "scar_h", "p90", "deagle", "awp", "m249"]
+var _crates: Dictionary = {}
+
+
+func _spawn_crates() -> void:
+	var regions: Array = world.region_points.keys()
+	regions.sort()
+	for i in CRATES:
+		var rng := Session.match_rng(500 + i)
+		var crate := LootCrate.new()
+		crate.index = i
+		var roll := rng.randf()
+		if roll < 0.55:
+			crate.kind = "weapon"
+			# Earlier entries are common, the end of the list is rare.
+			crate.weapon_id = CRATE_GUNS[mini(int(pow(rng.randf(), 1.6) * CRATE_GUNS.size()), CRATE_GUNS.size() - 1)]
+		elif roll < 0.8:
+			crate.kind = "ammo"
+		else:
+			crate.kind = "medkit"
+		var p := world.random_point_in(regions[rng.randi() % regions.size()], rng)
+		crate.position = p + Vector3(rng.randf_range(-14, 14), 0.0, rng.randf_range(-14, 14))
+		crate.position.y = world.ground_height(crate.position.x, crate.position.z)
+		world.add_child(crate)
+		crate.opened.connect(_on_crate_opened)
+		_crates[i] = crate
+
+
+func _on_crate_opened(index: int, p: PlayerController) -> void:
+	var crate: LootCrate = _crates.get(index)
+	if crate == null:
+		return
+	crate.apply(p)
+	hud().show_hint("Picked up: %s" % ("a " + WeaponCatalog.get_data(crate.weapon_id)["name"] if crate.kind == "weapon" else crate.kind.capitalize()))
+	Net.send_event("crate", {"i": index})
+
+
+func _on_event(kind: String, data: Dictionary) -> void:
+	if kind == "crate":
+		var crate: LootCrate = _crates.get(int(data.get("i", -1)))
+		if crate:
+			_crates.erase(crate.index)
+			crate.queue_free()
+
+
+func minimap_markers() -> Array:
+	var out: Array = []
+	var me := player().global_position
+	for crate: LootCrate in _crates.values():
+		if is_instance_valid(crate) and crate.global_position.distance_to(me) < 150.0:
+			out.append({"pos": crate.global_position, "color": Color(1.0, 0.75, 0.25), "kind": "loot"})
+	return out
 
 
 func _on_bot_died(bot: BotSoldier, killer: Node) -> void:
@@ -116,7 +184,7 @@ func _process(delta: float) -> void:
 				bot.objective = Vector3(_center.x, 0.0, _center.y) + (bot.global_position - Vector3(_center.x, 0, _center.y)).normalized() * radius * 0.4
 				if Vector2(bot.global_position.x, bot.global_position.z).distance_to(_center) > radius:
 					bot.take_hit(dps, Vector3.ZERO, null, false)
-	set_status("Alive %d   •   Zone %dm" % [_alive.size(), int(radius)])
+	set_status("Alive %d   •   Kills %d   •   Zone %dm" % [_alive.size(), int(kills.get(Session.my_id(), 0)), int(radius)])
 	if not Session.networked and _time > PHASES[PHASES.size() - 1][0] + 60.0 and p.is_alive():
 		end_match("YOU SURVIVED", true, 400)
 

@@ -21,6 +21,9 @@ var _results: Array = []          # [{"name", "time"}]
 var _finish_deadline := -1.0
 var _bots: Array[DrivableCar] = []
 var _bot_done: Dictionary = {}
+var _path_i := 0                    # my progress along the route (path point index)
+var _peer_progress: Dictionary = {}   # peer id -> path index (from their checkpoints)
+var _last_place := 0
 const BOT_RACERS := 3
 
 
@@ -172,15 +175,41 @@ func _process(delta: float) -> void:
 		if _car.global_position.distance_to(target) < CHECKPOINT_RADIUS + 3.0:
 			_next += 1
 			GameSettings.vibrate(20)
+			Audio.play_ui("click")
+			if Session.networked:
+				Net.send_event("race_cp", {"i": _path_i})
 			_show_rings()
 			if _next >= _rings.size():
 				Net.send_event("race_finish", {"name": GameSettings.player_name, "time": _time})
-	set_status("Checkpoint %d/%d   •   %s   •   Grenades %d" % [mini(_next + 1, _rings.size()), _rings.size(), _fmt(_time), player().grenades])
+	# Live position: compare progress along the route with every rival.
+	while _path_i + 1 < _path.size() and _car.global_position.distance_squared_to(_path[_path_i + 1]) < _car.global_position.distance_squared_to(_path[_path_i]):
+		_path_i += 1
+	var ahead := 0
+	var racers := 1
+	for i in _bots.size():
+		racers += 1
+		var rival := _bots[i].get_node_or_null("Pilot") as CarPilot if is_instance_valid(_bots[i]) else null
+		if _bot_done.has(i) or (rival and rival.route_index * 3 > _path_i):
+			ahead += 1
+	for peer: int in _peer_progress:
+		racers += 1
+		if int(_peer_progress[peer]) > _path_i:
+			ahead += 1
+	var place := ahead + 1
+	if place != _last_place and _last_place != 0 and _next < _rings.size():
+		hud().show_hint("Up to P%d!" % place if place < _last_place else "Dropped to P%d" % place)
+	_last_place = place
+	set_status("P%d/%d   •   Checkpoint %d/%d   •   %s%s" % [place, racers, mini(_next + 1, _rings.size()), _rings.size(), _fmt(_time),
+		"" if _career() else "   •   Grenades %d" % player().grenades])
 	if _finish_deadline > 0.0 and _time > _finish_deadline:
 		_finish()
 
 
 func _on_event(kind: String, data: Dictionary) -> void:
+	if kind == "race_cp":
+		if int(data.get("sender", 0)) != Session.my_id():
+			_peer_progress[int(data.get("sender", 0))] = int(data.get("i", 0))
+		return
 	if kind != "race_finish":
 		return
 	_results.append({"name": str(data.get("name", "?")), "time": float(data.get("time", 0.0)), "peer": int(data.get("sender", 0))})

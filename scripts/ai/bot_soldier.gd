@@ -31,6 +31,9 @@ var melee_damage := 12.0
 ## Character model: "" picks one (police -> SWAT/soldier, others -> city people).
 var model_id := ""
 var _swing_id := 0
+## Clean Hands: landing hits fills this; at 100 the bot surges.
+var surge_meter := 0.0
+var can_surge := false
 
 var health: HealthComponent
 var rig: CharacterRig
@@ -266,7 +269,26 @@ func _melee() -> void:
 	if target is PlayerController:
 		(target as PlayerController).last_attacker_peer = bot_id   # KO credit
 	Audio.play("punch_heavy" if heavy else "punch_light", target.global_position + Vector3.UP)
+	if can_surge:
+		surge_meter += 25.0 if heavy else 12.0
+		if surge_meter >= 100.0:
+			surge_meter = 0.0
+			_surge()
 	target.take_hit(melee_damage * (1.6 if heavy else 1.0), offset.normalized() * (6.0 if heavy else 3.0), self, heavy)
+
+
+## The same blast players get: everyone within 5 m is thrown back.
+func _surge() -> void:
+	Effects.surge(get_tree(), global_position + Vector3.UP, 5.0)
+	for node in get_tree().get_nodes_in_group(&"player") + get_tree().get_nodes_in_group(&"bots"):
+		var other := node as Node3D
+		if other == self or other == null or not other.has_method(&"take_hit"):
+			continue
+		var offset := other.global_position - global_position
+		if offset.length() < 5.0:
+			if other is PlayerController:
+				(other as PlayerController).last_attacker_peer = bot_id
+			other.call(&"take_hit", 22.0, (Vector3(offset.x, 0.0, offset.z).normalized() + Vector3.UP * 0.4) * 9.0, self, true)
 
 
 ## Simple obstacle feeler: turn away from walls straight ahead.

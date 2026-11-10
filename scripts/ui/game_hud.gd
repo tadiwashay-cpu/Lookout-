@@ -127,6 +127,7 @@ func _ready() -> void:
 	_place(pause, Control.PRESET_TOP_RIGHT, -100, 18, -24, 90)
 	pause.pressed.connect(_open_pause)
 	_root.add_child(pause)
+	_build_match_feedback()
 	_full_map = FullMap.new()
 	_root.add_child(_full_map)
 	_build_pause_menu()
@@ -214,6 +215,71 @@ func show_banner(text: String, hold: float, font_size: int = 72) -> void:
 
 
 var _fade_rect: ColorRect
+var _feed_box: VBoxContainer
+var _marker: Label
+var _hurt: ColorRect
+var _marker_tween: Tween
+var _hurt_tween: Tween
+
+
+func _build_match_feedback() -> void:
+	# Red flash when you take damage (under everything else).
+	_hurt = ColorRect.new()
+	_hurt.color = Color(0.8, 0.05, 0.03, 0.0)
+	_hurt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_hurt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_hurt)
+	_root.move_child(_hurt, 0)
+	# Hit marker at the crosshair.
+	_marker = _label(64, HORIZONTAL_ALIGNMENT_CENTER)
+	_marker.text = "×"
+	_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_place(_marker, Control.PRESET_CENTER, -60, -64, 60, 56)
+	_marker.modulate.a = 0.0
+	_root.add_child(_marker)
+	# Kill feed, top right under the ammo/gear text.
+	_feed_box = VBoxContainer.new()
+	_feed_box.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_feed_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(_feed_box, Control.PRESET_TOP_RIGHT, -620, 180, -40, 420)
+	_root.add_child(_feed_box)
+
+
+## A line in the kill feed ("Ace ▸ Blaze"). Fades after a few seconds.
+func feed(text: String, color: Color = Color(0.95, 0.93, 0.88)) -> void:
+	var line := _label(24, HORIZONTAL_ALIGNMENT_RIGHT)
+	line.text = text
+	line.add_theme_color_override("font_color", color)
+	_feed_box.add_child(line)
+	while _feed_box.get_child_count() > 5:
+		var old := _feed_box.get_child(0)
+		_feed_box.remove_child(old)
+		old.queue_free()
+	var tween := line.create_tween()
+	tween.tween_interval(5.0)
+	tween.tween_property(line, "modulate:a", 0.0, 0.8)
+	tween.tween_callback(line.queue_free)
+
+
+## Your shot/punch connected. `kill` = red and bigger.
+func hit_marker(kill: bool = false) -> void:
+	_marker.add_theme_color_override("font_color", Color(1.0, 0.25, 0.2) if kill else Color(1, 1, 1))
+	_marker.scale = Vector2.ONE * (1.5 if kill else 1.0)
+	_marker.pivot_offset = _marker.size * 0.5
+	_marker.modulate.a = 1.0
+	if _marker_tween:
+		_marker_tween.kill()
+	_marker_tween = create_tween()
+	_marker_tween.tween_property(_marker, "modulate:a", 0.0, 0.35 if kill else 0.18)
+	Audio.play_ui("click")
+
+
+func damage_flash(strength: float) -> void:
+	_hurt.color.a = clampf(0.12 + strength * 0.3, 0.0, 0.45)
+	if _hurt_tween:
+		_hurt_tween.kill()
+	_hurt_tween = create_tween()
+	_hurt_tween.tween_property(_hurt, "color:a", 0.0, 0.5)
 var _menu: PanelContainer
 
 
