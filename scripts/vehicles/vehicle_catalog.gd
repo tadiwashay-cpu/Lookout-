@@ -66,6 +66,9 @@ const STORE_CARS := {
 		"name": "Strix V12", "price": 30000, "paint": Color(0.25, 0.75, 0.12), "tune": {"top_speed": 92.0, "accel": 9.8, "grip": 4.4}, "unlock": 5},
 	"vortex_rs": {"model": "vortex_rs", "rank": "S", "mass": 1400.0, "drive": "rwd", "store": true,
 		"name": "Vortex RS", "price": 40000, "paint": Color(0.08, 0.45, 0.9), "tune": {"top_speed": 95.0, "accel": 10.2, "grip": 4.6}, "unlock": 7},
+	# Your hypercar (from your model, tools/import_ai_car.py).
+	"redline_gt": {"model": "redline_gt", "rank": "S", "mass": 1450.0, "drive": "awd", "store": true,
+		"name": "Redline GT", "price": 55000, "paint": Color(0.7, 0.04, 0.04), "tune": {"top_speed": 98.0, "accel": 10.8, "grip": 4.8, "steer": 0.62}, "unlock": 6},
 }
 
 const POLICE_PAINT := {
