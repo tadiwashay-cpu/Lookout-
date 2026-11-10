@@ -39,6 +39,11 @@ var player_name: String = "Player"
 var money: int = 0
 var owned_weapons: Array = ["m4a1"]
 var equipped_weapon: String = "m4a1"
+## Your garage: the car waiting at HQ and used in the race career.
+var owned_cars: Array = ["coupe"]
+var garage_car: String = "coupe"
+## Race career: how many events you've won (they unlock in order).
+var career_won: int = 0
 
 # --- camera / controls
 var camera_mode: int = THIRD_PERSON
@@ -72,6 +77,9 @@ func _ready() -> void:
 		money = config.get_value("profile", "money", money)
 		owned_weapons = config.get_value("profile", "owned_weapons", owned_weapons)
 		equipped_weapon = config.get_value("profile", "equipped_weapon", equipped_weapon)
+		owned_cars = config.get_value("profile", "owned_cars", owned_cars)
+		garage_car = config.get_value("profile", "garage_car", garage_car)
+		career_won = config.get_value("profile", "career_won", career_won)
 		day_length_minutes = config.get_value("graphics", "day_length", day_length_minutes)
 		camera_mode = config.get_value("camera", "mode", camera_mode)
 		look_sensitivity = config.get_value("camera", "look_sensitivity", look_sensitivity)
@@ -184,6 +192,36 @@ func equip_weapon(id: String) -> void:
 		save()
 
 
+func buy_car(id: String) -> bool:
+	var data: Dictionary = VehicleCatalog.STORE_CARS.get(id, {})
+	if data.is_empty() or owned_cars.has(id) or money < int(data["price"]) or career_won < int(data.get("unlock", 0)):
+		return false
+	money -= int(data["price"])
+	owned_cars.append(id)
+	garage_car = id
+	save()
+	return true
+
+
+func select_car(id: String) -> void:
+	if owned_cars.has(id):
+		garage_car = id
+		save()
+
+
+## Sell back to a pawn shop for half (never the last weapon you own).
+func sell_weapon(id: String) -> int:
+	if not owned_weapons.has(id) or owned_weapons.size() <= 1:
+		return 0
+	var value := int(WeaponCatalog.get_data(id)["price"]) / 2
+	owned_weapons.erase(id)
+	if equipped_weapon == id:
+		equipped_weapon = owned_weapons[0]
+	money += value
+	save()
+	return value
+
+
 func add_money(amount: int) -> void:
 	money = maxi(money + amount, 0)
 	save()
@@ -201,6 +239,9 @@ func save() -> void:
 	config.set_value("profile", "money", money)
 	config.set_value("profile", "owned_weapons", owned_weapons)
 	config.set_value("profile", "equipped_weapon", equipped_weapon)
+	config.set_value("profile", "owned_cars", owned_cars)
+	config.set_value("profile", "garage_car", garage_car)
+	config.set_value("profile", "career_won", career_won)
 	config.set_value("graphics", "day_length", day_length_minutes)
 	config.set_value("camera", "mode", camera_mode)
 	config.set_value("camera", "look_sensitivity", look_sensitivity)

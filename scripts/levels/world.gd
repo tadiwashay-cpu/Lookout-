@@ -432,7 +432,8 @@ func _spawn_cars() -> void:
 		return   # race cars only
 	# Crew car in the HQ garage (yours — no theft heat).
 	if Session.mode == Session.MODE_STORY:
-		var own := _spawn_car("coupe", hq_garage, 0.0, Color(0.1, 0.1, 0.11))
+		var garage: Dictionary = VehicleCatalog.get_data(GameSettings.garage_car)
+		var own := _spawn_car(GameSettings.garage_car, hq_garage, 0.0, garage.get("paint", Color(0.1, 0.1, 0.11)))
 		own.has_been_stolen = true
 	# Police at the precinct
 	_spawn_car("police_sedan", precinct_position + Vector3(-6, 0, 0), PI * 0.5)

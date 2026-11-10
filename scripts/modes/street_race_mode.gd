@@ -36,11 +36,16 @@ func begin() -> void:
 	var right := Vector3(-forward.z, 0.0, forward.x)
 	var pos := start - forward * (8.0 + (grid_index / 2) * 9.0) + right * (3.5 if grid_index % 2 == 0 else -3.5)
 	pos.y = world.ground_height(pos.x, pos.z) + 0.6
-	_car = world.spawn_car(RACE_CAR, pos, atan2(forward.x, forward.z), Color.from_hsv(fmod(grid_index * 0.17, 1.0), 0.55, 0.55))
+	var my_car := RACE_CAR
+	var my_paint := Color.from_hsv(fmod(grid_index * 0.17, 1.0), 0.55, 0.55)
+	if _career():
+		my_car = GameSettings.garage_car   # career: race what you own
+		my_paint = VehicleCatalog.get_data(my_car).get("paint", Color(0.1, 0.1, 0.11))
+	_car = world.spawn_car(my_car, pos, atan2(forward.x, forward.z), my_paint)
 	_car.locked = true
 	_car.has_been_stolen = true
 	_car.freeze = true
-	player().refill_grenades(6)
+	player().refill_grenades(0 if _career() else 6)   # career races are clean
 	player().grenade_cooldown = 3.0
 	_build_rings()
 	Net.match_event.connect(_on_event)
@@ -59,6 +64,9 @@ func _build_route() -> void:
 	path.append(suburb_end)
 	if Session.match_rng(5).randf() < 0.5:
 		path.reverse()
+	if _career():
+		var keep := maxi(int(path.size() * float(RaceCareer.event(Session.career_event)["route"])), 8)
+		path = path.slice(0, mini(keep, path.size()))
 	for p in path:
 		_path.append(Vector3(p.x, world.ground_height(p.x, p.z) + 0.4, p.z))
 	_checkpoints.append(path[0])
@@ -81,18 +89,24 @@ func _spawn_bot_racers(start: Vector3, forward: Vector3, right: Vector3) -> void
 	for i in range(0, _path.size(), 3):
 		route.append(_path[i])
 	route.append(_path[_path.size() - 1])
-	for i in BOT_RACERS:
+	var rivals: Array = ["sport", "sport", "sport"]
+	var skill: Array = [0.85, 1.05]
+	if _career():
+		rivals = RaceCareer.event(Session.career_event)["rivals"]
+		skill = RaceCareer.event(Session.career_event)["skill"]
+	for i in rivals.size():
 		var slot := i + 1
 		var pos := start - forward * (8.0 + (slot / 2) * 9.0) + right * (3.5 if slot % 2 == 0 else -3.5)
 		pos.y = world.ground_height(pos.x, pos.z) + 0.6
-		var car := world.spawn_car(RACE_CAR, pos, atan2(forward.x, forward.z), Color.from_hsv(fmod(slot * 0.17, 1.0), 0.55, 0.55))
+		var rival_id: String = rivals[i]
+		var car := world.spawn_car(rival_id, pos, atan2(forward.x, forward.z), VehicleCatalog.get_data(rival_id).get("paint", Color.from_hsv(fmod(slot * 0.17, 1.0), 0.55, 0.55)))
 		car.has_been_stolen = true
 		car.freeze = true
-		car.set_meta(&"racer_name", ["Ace", "Blaze", "Cruz"][i])
+		car.set_meta(&"racer_name", ["Ace", "Blaze", "Cruz", "Dex"][i % 4])
 		var pilot := CarPilot.new()
 		pilot.name = "Pilot"
 		pilot.route = route
-		pilot.skill = rng.randf_range(0.85, 1.05)
+		pilot.skill = rng.randf_range(float(skill[0]), float(skill[1]))
 		pilot.aggression = 1.3
 		car.add_child(pilot)
 		_bots.append(car)
@@ -184,7 +198,19 @@ func _finish() -> void:
 			my_place = i + 1
 	var won := my_place == 1
 	hud().show_hint("\n".join(lines))
+	if _career():
+		var event := RaceCareer.event(Session.career_event)
+		var reward: int = int(event["reward"]) if won else (int(event["reward"]) / 5 if my_place > 0 else 0)
+		if won and Session.career_event >= GameSettings.career_won:
+			GameSettings.career_won = Session.career_event + 1
+			GameSettings.save()
+		end_match(("%s — WON" % event["name"]).to_upper() if won else ("FINISHED #%d" % my_place if my_place > 0 else "DID NOT FINISH"), won, reward)
+		return
 	end_match("YOU WIN" if won else ("FINISHED #%d" % my_place if my_place > 0 else "DID NOT FINISH"), won, 700 if won else (200 if my_place > 0 else 0))
+
+
+func _career() -> bool:
+	return Session.career_event >= 0 and not Session.networked
 
 
 func minimap_markers() -> Array:

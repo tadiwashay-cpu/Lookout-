@@ -27,9 +27,17 @@ var networked := false
 var match_seed: int = 0
 ## peer_id -> "robbers" | "police" (heist only)
 var teams: Dictionary = {}
+## Race career event being played (-1 = a normal street race).
+var career_event := -1
+
+
+func start_career_race(index: int) -> void:
+	career_event = index
+	start_match(MODE_STREET_RACE, randi(), {}, false)
 
 
 func start_story() -> void:
+	career_event = -1
 	mode = MODE_STORY
 	networked = false
 	match_seed = randi()
@@ -47,6 +55,7 @@ func start_match(new_mode: int, seed_value: int, team_map: Dictionary, is_networ
 
 
 func back_to_menu() -> void:
+	career_event = -1
 	Net.leave()
 	Engine.time_scale = 1.0
 	get_tree().paused = false

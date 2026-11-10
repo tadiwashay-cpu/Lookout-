@@ -8,6 +8,7 @@ var _main: VBoxContainer
 var _mp_panel: PanelContainer
 var _mode_buttons: Array[Button] = []
 var _shop_title: Label
+var _shop_cars := false   # SHOP tab: guns or cars
 var _shop_list: VBoxContainer
 var _selected := 0
 var _ip_edit: LineEdit
@@ -63,7 +64,7 @@ func _ready() -> void:
 	_main.custom_minimum_size.x = 520
 	_main.alignment = BoxContainer.ALIGNMENT_CENTER
 	layout.add_child(_main)
-	for entry: Array in [["STORY", _on_story], ["MULTIPLAYER", _on_multiplayer], ["SHOP", _on_shop], ["SETTINGS", _on_settings], ["QUIT", _on_quit]]:
+	for entry: Array in [["STORY", _on_story], ["MULTIPLAYER", _on_multiplayer], ["RACE CAREER", _on_career], ["SHOP", _on_shop], ["SETTINGS", _on_settings], ["QUIT", _on_quit]]:
 		var button := Button.new()
 		button.text = entry[0]
 		button.custom_minimum_size.y = 96
@@ -151,7 +152,18 @@ func _on_shop() -> void:
 	panel.add_child(root)
 	_shop_title = Label.new()
 	_shop_title.add_theme_font_size_override("font_size", 46)
+	_shop_title.add_theme_font_override("font", UITheme.TITLE_FONT)
 	root.add_child(_shop_title)
+	var tabs := HBoxContainer.new()
+	for entry: Array in [["GUNS", false], ["CARS", true]]:
+		var tab := Button.new()
+		tab.text = entry[0]
+		tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tab.pressed.connect(func() -> void:
+			_shop_cars = entry[1]
+			_rebuild_shop())
+		tabs.add_child(tab)
+	root.add_child(tabs)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(scroll)
@@ -166,10 +178,13 @@ func _on_shop() -> void:
 
 
 func _rebuild_shop() -> void:
-	_shop_title.text = "GUN SHOP   —   $%d" % GameSettings.money
+	_shop_title.text = "%s   —   $%d" % ["CAR STORE" if _shop_cars else "GUN SHOP", GameSettings.money]
 	_money.text = "$%d" % GameSettings.money
 	for child in _shop_list.get_children():
 		child.queue_free()
+	if _shop_cars:
+		_rebuild_car_shop()
+		return
 	for id: String in WeaponCatalog.shop_ids():
 		var data := WeaponCatalog.get_data(id)
 		var row := HBoxContainer.new()
@@ -192,6 +207,87 @@ func _rebuild_shop() -> void:
 			action.pressed.connect(_shop_buy.bind(id))
 		row.add_child(action)
 		_shop_list.add_child(row)
+
+
+## Store exclusives (bars instead of the hidden class) + your garage.
+func _rebuild_car_shop() -> void:
+	var ids: Array = GameSettings.owned_cars.duplicate()
+	for id: String in VehicleCatalog.STORE_CARS:
+		if not ids.has(id):
+			ids.append(id)
+	for id: String in ids:
+		var data := VehicleCatalog.get_data(id)
+		var row := HBoxContainer.new()
+		var info := Label.new()
+		var bars := func(v: float, top: float) -> String: return "■".repeat(clampi(roundi(v / top * 8.0), 1, 8)).rpad(8, "□")
+		info.text = "%s\n  SPEED %s   ACCEL %s   GRIP %s" % [data["name"], bars.call(float(data["top_speed"]), 84.0), bars.call(float(data["accel"]), 9.2), bars.call(float(data["grip"]), 4.2)]
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_font_size_override("font_size", 26)
+		row.add_child(info)
+		var action := Button.new()
+		action.custom_minimum_size.x = 300
+		var locked := int(data.get("unlock", 0)) > GameSettings.career_won
+		if GameSettings.garage_car == id:
+			action.text = "IN GARAGE"
+			action.disabled = true
+		elif GameSettings.owned_cars.has(id):
+			action.text = "USE"
+			action.pressed.connect(func() -> void:
+				GameSettings.select_car(id)
+				_rebuild_shop())
+		elif locked:
+			action.text = "WIN %d RACES" % int(data["unlock"])
+			action.disabled = true
+		else:
+			action.text = "BUY $%d" % int(data["price"])
+			action.disabled = GameSettings.money < int(data["price"])
+			action.pressed.connect(func() -> void:
+				GameSettings.buy_car(id)
+				_rebuild_shop())
+		row.add_child(action)
+		_shop_list.add_child(row)
+
+
+func _on_career() -> void:
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -620
+	panel.offset_right = 620
+	panel.offset_top = -420
+	panel.offset_bottom = 420
+	add_child(panel)
+	var root := VBoxContainer.new()
+	panel.add_child(root)
+	var title := Label.new()
+	title.text = "RACE CAREER   —   car: %s" % VehicleCatalog.get_data(GameSettings.garage_car)["name"]
+	title.add_theme_font_size_override("font_size", 42)
+	title.add_theme_font_override("font", UITheme.TITLE_FONT)
+	root.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	for i in RaceCareer.EVENTS.size():
+		var event: Dictionary = RaceCareer.EVENTS[i]
+		var row := HBoxContainer.new()
+		var info := Label.new()
+		info.text = "%d. %s   •   %d rivals   •   $%d%s" % [i + 1, event["name"], (event["rivals"] as Array).size(), int(event["reward"]), "   ✓" if i < GameSettings.career_won else ""]
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_font_size_override("font_size", 28)
+		row.add_child(info)
+		var go := Button.new()
+		go.custom_minimum_size.x = 220
+		go.text = "RACE" if RaceCareer.unlocked(i) else "LOCKED"
+		go.disabled = not RaceCareer.unlocked(i)
+		go.pressed.connect(Session.start_career_race.bind(i))
+		row.add_child(go)
+		list.add_child(row)
+	var close := Button.new()
+	close.text = "CLOSE"
+	close.pressed.connect(panel.queue_free)
+	root.add_child(close)
 
 
 func _shop_equip(id: String) -> void:

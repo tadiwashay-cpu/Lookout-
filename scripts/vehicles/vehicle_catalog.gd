@@ -40,6 +40,22 @@ const VEHICLES := {
 	"police_suv": {"model": "suv", "rank": "B", "mass": 2200.0, "drive": "awd", "police": true},
 }
 
+## Car store exclusives: never parked in the world, only bought from the
+## main menu's CAR shop. "tune" overrides the class stats; "paint" is the
+## factory colour; "unlock" = race career events you must win first.
+const STORE_CARS := {
+	"rally_hatch": {"model": "hatchback", "rank": "B", "mass": 1100.0, "drive": "awd", "store": true,
+		"name": "Rally Hatch", "price": 2500, "paint": Color(0.1, 0.25, 0.6), "tune": {"accel": 5.6, "grip": 3.4, "top_speed": 50.0}},
+	"trophy_truck": {"model": "offroad", "rank": "A", "mass": 1650.0, "drive": "awd", "store": true,
+		"name": "Trophy Truck", "price": 4000, "paint": Color(0.85, 0.55, 0.1), "tune": {"health": 1200.0, "top_speed": 55.0}},
+	"drift_spec": {"model": "coupe", "rank": "A", "mass": 1250.0, "drive": "rwd", "store": true,
+		"name": "Drift Spec Coupe", "price": 4500, "paint": Color(0.92, 0.92, 0.9), "tune": {"grip": 3.0, "steer": 0.66, "accel": 6.6}},
+	"street_king": {"model": "sport", "rank": "S", "mass": 1200.0, "drive": "rwd", "store": true,
+		"name": "Street King GT", "price": 9000, "paint": Color(0.55, 0.03, 0.04), "tune": {"top_speed": 78.0, "accel": 8.6}, "unlock": 3},
+	"night_runner": {"model": "sport", "rank": "S", "mass": 1180.0, "drive": "awd", "store": true,
+		"name": "Night Runner", "price": 15000, "paint": Color(0.04, 0.04, 0.05), "tune": {"top_speed": 84.0, "accel": 9.2, "grip": 4.2}, "unlock": 6},
+}
+
 const POLICE_PAINT := {
 	"police_suv": Color(0.04, 0.04, 0.05),     # black
 }
@@ -59,12 +75,15 @@ const CIVILIAN_PAINTS := [
 
 
 static func get_data(vehicle_id: String) -> Dictionary:
-	var base: Dictionary = VEHICLES.get(vehicle_id, VEHICLES["sedan"])
+	var base: Dictionary = VEHICLES.get(vehicle_id, STORE_CARS.get(vehicle_id, VEHICLES["sedan"]))
 	var data := base.duplicate()
 	data.merge(RANK_STATS[base["rank"]])
+	data.merge(base.get("tune", {}), true)
 	data["id"] = vehicle_id
 	data["police"] = base.get("police", false)
 	data["model_path"] = "res://assets/models/vehicles/%s.glb" % base["model"]
+	if not data.has("name"):
+		data["name"] = vehicle_id.capitalize()
 	return data
 
 
