@@ -30,6 +30,7 @@ var _hint_tween: Tween
 
 
 func _ready() -> void:
+	add_to_group(&"hud")
 	layer = 10
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_root = Control.new()

@@ -38,6 +38,17 @@ var weapon_id := ""
 var weapon_class := "rifle"
 ## Unarmed: use the fighting stance instead of the relaxed idle (enemies near).
 var fight_ready := false
+## True first person: the body stays visible (you see your arms and gun),
+## only the head is collapsed so it doesn't block the camera.
+var first_person := false
+## Keep feet on the ground: lift the model if an animation pushes the feet
+## below the floor (different rigs/clips sit slightly differently).
+var ground_feet := true
+var _head := -1
+var _feet: Array[int] = []
+var _foot_rest_y := 0.0
+var _model_base_y := 0.0
+var _lift := 0.0
 var muzzle: Node3D
 var armed := true:
 	set(value):
@@ -123,8 +134,17 @@ func setup(character_id: String, height: float = 1.8) -> void:
 				_left_hand = i
 			elif bone.ends_with("RightHandMiddle1"):
 				_right_finger = i
+			elif bone.ends_with("Head") and not bone.ends_with("HeadTop_End"):
+				_head = i
+			elif bone.ends_with("LeftFoot") or bone.ends_with("RightFoot"):
+				_feet.append(i)
 			elif bone.ends_with("LeftHandMiddle1"):
 				_left_finger = i
+	if skeleton and not _feet.is_empty():
+		_foot_rest_y = INF
+		for foot in _feet:
+			_foot_rest_y = minf(_foot_rest_y, skeleton.get_bone_global_rest(foot).origin.y)
+	_model_base_y = model.position.y
 	for mesh in model.find_children("*", "MeshInstance3D", true, false):
 		var instance := mesh as MeshInstance3D
 		for s in instance.mesh.get_surface_count():
@@ -171,7 +191,25 @@ func kick(amount: float = 1.0) -> void:
 
 func _process(delta: float) -> void:
 	_recoil = move_toward(_recoil, 0.0, delta * 0.6)
+	if skeleton:
+		if first_person and _head >= 0:
+			skeleton.set_bone_pose_scale(_head, Vector3(0.001, 0.001, 0.001))
+		if ground_feet and not _feet.is_empty():
+			_keep_feet_on_ground(delta)
 	_update_weapon()
+
+
+func _keep_feet_on_ground(delta: float) -> void:
+	var lowest := INF
+	for foot in _feet:
+		lowest = minf(lowest, skeleton.get_bone_global_pose(foot).origin.y)
+	# Skeleton space -> how far below its rest height the lowest ankle is.
+	var sink := (_foot_rest_y - lowest) * skeleton.global_basis.get_scale().y
+	var want := clampf(sink, 0.0, 0.35)
+	_lift = lerpf(_lift, want, clampf(delta * 12.0, 0.0, 1.0))
+	var holder := get_child(0) as Node3D
+	if holder and holder.get_child_count() > 0:
+		(holder.get_child(0) as Node3D).position.y = _model_base_y + _lift
 
 
 func _palm(hand: int, finger: int) -> Vector3:

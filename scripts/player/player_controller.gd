@@ -103,6 +103,12 @@ var _yaw := 0.0
 var _pitch := -0.2
 var _model_yaw := 0.0
 var _camera_mode := 0
+## Modes can lock the view (battle royale: first person only). -1 = player's choice.
+var forced_camera := -1
+## Brawl camera (Clean Hands / fist fights): closer, punchier, finisher cams.
+var _roll := 0.0
+var _fov_punch := 0.0
+var _finisher_cam: Camera3D
 var _shake := 0.0
 var _pivot: Node3D
 var _spring: SpringArm3D
@@ -291,10 +297,15 @@ func _process(delta: float) -> void:
 	_pivot.rotation = Vector3(_pitch, _yaw, 0.0)
 
 	var first_person := _camera_mode == GameSettings.FIRST_PERSON
-	var target_fov := aim_fov if aiming else camera_fov
-	_camera.fov = lerpf(_camera.fov, target_fov, clampf(delta * 10.0, 0.0, 1.0))
+	var target_fov := (aim_fov if aiming else camera_fov) + _fov_punch
+	_fov_punch = move_toward(_fov_punch, 0.0, delta * 30.0)
+	_camera.fov = lerpf(_camera.fov, target_fov, clampf(delta * 14.0, 0.0, 1.0))
+	_roll = move_toward(_roll, 0.0, delta * 0.5)
+	_camera.rotation.z = _roll
 	if not first_person:
-		var target_len := aim_distance if aiming else third_person_distance
+		var brawl := _in_brawl()
+		var target_len := aim_distance if aiming else (2.5 if brawl else third_person_distance)
+		_spring.position.x = lerpf(_spring.position.x, 0.35 if brawl else shoulder_offset, clampf(delta * 4.0, 0.0, 1.0))
 		_spring.spring_length = lerpf(_spring.spring_length, target_len, clampf(delta * 10.0, 0.0, 1.0))
 
 	if _shake > 0.0:
@@ -320,7 +331,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_tick_timers(delta)
-	if Input.is_action_just_pressed(&"toggle_camera"):
+	if Input.is_action_just_pressed(&"toggle_camera") and forced_camera < 0:
 		GameSettings.toggle_camera_mode()
 	if Input.is_action_just_pressed(&"swap_weapon") and weapons_allowed:
 		_wants_armed = not _wants_armed
@@ -481,6 +492,55 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 		_stance_check = 0.3
 		rig.fight_ready = not is_armed() and (Session.mode == Session.MODE_CLEAN_HANDS or _enemy_within(7.0))
 	rig.play_locomotion(local_right, local_forward)
+
+
+## Close-in fight camera: Clean Hands, or fists out with someone close.
+func _in_brawl() -> bool:
+	return not is_armed() and current_vehicle == null and (Session.mode == Session.MODE_CLEAN_HANDS or rig.fight_ready)
+
+
+## Heavier camera reaction in fights: shake, a roll in the hit direction
+## and a quick FOV punch.
+func brawl_impact(strength: float, side: float) -> void:
+	var boost := 1.6 if Session.mode == Session.MODE_CLEAN_HANDS else 1.0
+	_shake = maxf(_shake, strength * boost)
+	_roll = clampf(_roll + side * 0.07 * strength * boost, -0.12, 0.12)
+	_fov_punch = maxf(_fov_punch, 7.0 * strength * boost)
+
+
+## Def Jam-style finisher: slow motion (solo only) and a cut to a low side
+## angle on the knock-out, with a big shake and a KO banner.
+func _play_finisher(target: Node3D) -> void:
+	if _finisher_cam or target == null:
+		return
+	var mid := (global_position + target.global_position) * 0.5 + Vector3.UP * 1.0
+	var across := (target.global_position - global_position)
+	across.y = 0.0
+	var side := across.normalized().cross(Vector3.UP) * (1.0 if randf() > 0.5 else -1.0)
+	_finisher_cam = Camera3D.new()
+	_finisher_cam.fov = 58.0
+	_finisher_cam.near = 0.05
+	_finisher_cam.top_level = true
+	add_child(_finisher_cam)
+	_finisher_cam.global_position = mid + side * 3.0 + Vector3.UP * -0.35
+	_finisher_cam.look_at(mid, Vector3.UP)
+	_finisher_cam.make_current()
+	var tween := create_tween().set_ignore_time_scale(true)
+	tween.tween_property(_finisher_cam, "global_position", mid + side * 2.2 + Vector3.UP * 0.2, 1.1).set_trans(Tween.TRANS_SINE)
+	var hud := get_tree().get_first_node_in_group(&"hud")
+	if hud and hud.has_method(&"show_banner"):
+		hud.call(&"show_banner", "K.O.!", 1.2, 140)
+	brawl_impact(1.0, side.x)
+	GameSettings.vibrate(120)
+	if not Session.networked:
+		Engine.time_scale = 0.3
+	await get_tree().create_timer(1.15, true, false, true).timeout
+	Engine.time_scale = 1.0
+	if is_instance_valid(_finisher_cam):
+		_finisher_cam.queue_free()
+	_finisher_cam = null
+	if current_vehicle == null:
+		_camera.make_current()
 
 
 func _enemy_within(radius: float) -> bool:
@@ -738,11 +798,17 @@ func _perform_punch() -> void:
 		target.take_hit(_attack_damage, forward * (7.0 if _is_finisher() else 2.5), self, _is_finisher())
 		attack_landed.emit(target, _attack_damage, light_damage.size() if _is_finisher() else _combo_step)
 		landed = true
+		var finisher_ko: bool = _is_finisher() and target.has_method(&"is_alive") and not target.call(&"is_alive")
+		if finisher_ko:
+			_play_finisher(target as Node3D)
+		else:
+			var side := signf((target as Node3D).global_position.dot(global_basis.x) - global_position.dot(global_basis.x))
+			brawl_impact(0.55 if _is_finisher() else 0.3, side)
 		if surge_needs_meter:
 			surge_meter = minf(surge_meter + (25.0 if _is_finisher() else 12.0), 100.0)
 	if landed:
 		_hit_stop(0.08 if _is_finisher() else 0.045)
-		_shake = 0.55 if _is_finisher() else 0.3
+		_shake = maxf(_shake, 0.55 if _is_finisher() else 0.3)
 		GameSettings.vibrate(35 if _is_finisher() else 15)
 
 
@@ -791,7 +857,10 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, heavy: bool =
 		heavy = false
 	health.take_damage(damage, attacker)
 	velocity += knockback
-	_shake = 0.4
+	if is_armed():
+		_shake = 0.4
+	else:
+		brawl_impact(0.7 if heavy else 0.4, signf(knockback.dot(global_basis.x)))
 	GameSettings.vibrate(40)
 	if heavy:
 		_attacking = false
@@ -937,12 +1006,21 @@ func _send_network_state(delta: float) -> void:
 
 # ----------------------------------------------------------------- camera
 
+func lock_camera_mode(mode: int) -> void:
+	forced_camera = mode
+	_apply_camera_mode(mode, true)
+
+
 func _apply_camera_mode(mode: int, instant: bool = false) -> void:
+	if forced_camera >= 0:
+		mode = forced_camera
 	_camera_mode = mode
 	var first_person := mode == GameSettings.FIRST_PERSON
 	var target_length := 0.0 if first_person else third_person_distance
 	var target_offset := 0.0 if first_person else shoulder_offset
-	_set_shadow_only(_model, first_person)
+	# True first person: keep the body (arms + gun in view), hide only the head.
+	rig.first_person = first_person
+	_camera.position.z = -0.14 if first_person else 0.0
 	if instant:
 		_spring.spring_length = target_length
 		_spring.position.x = target_offset

@@ -153,15 +153,15 @@ func _build_from_model() -> void:
 		wheel.name = wheel_name
 		var mesh_size := wheel_mesh.get_aabb().size
 		wheel.wheel_radius = maxf(mesh_size.y, mesh_size.z) * 0.5
-		wheel.wheel_rest_length = 0.14
+		wheel.wheel_rest_length = 0.16
 		# Attach the suspension above the hub so the resting wheel sits where
 		# the model drew it (otherwise the car squats and wheels look sunken).
-		wheel.position = to_local(wheel_mesh.global_position) + Vector3.UP * 0.1
-		wheel.suspension_travel = 0.2
-		wheel.suspension_stiffness = 60.0
+		wheel.position = to_local(wheel_mesh.global_position) + Vector3.UP * 0.13
+		wheel.suspension_travel = 0.26
+		wheel.suspension_stiffness = 90.0   # ~2.7 cm sag at rest, stays off the bump stops
 		wheel.suspension_max_force = float(data["mass"]) * 14.0
-		wheel.damping_compression = 1.8
-		wheel.damping_relaxation = 2.4
+		wheel.damping_compression = 2.4
+		wheel.damping_relaxation = 3.0
 		wheel.wheel_friction_slip = data["grip"]
 		wheel.wheel_roll_influence = 0.05   # low = the chassis won't be levered over
 		wheel.use_as_steering = is_front
@@ -498,7 +498,8 @@ func _stabilize(delta: float) -> void:
 	var pitch_rate := angular_velocity.dot(global_basis.x)
 	apply_torque(-global_basis.x * pitch_rate * 1.5 * mass)
 	# Downforce grows with speed
-	apply_central_force(-up * speed * speed * mass * 0.007)
+	# Capped so the springs never bottom out (that's what sank the cars).
+	apply_central_force(-up * minf(speed * speed * 0.005, 7.0) * mass)
 	# Upside down and stopped: flip back onto the wheels after a moment.
 	if up.dot(Vector3.UP) < 0.35 and speed < 3.0:
 		_upside_down_time += delta

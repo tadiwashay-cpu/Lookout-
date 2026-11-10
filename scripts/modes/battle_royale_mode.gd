@@ -26,6 +26,7 @@ func begin() -> void:
 	var p := world.random_point_in(region, rng)
 	_center = Vector2(p.x, p.z)
 	player().respawn_enabled = false
+	player().lock_camera_mode(GameSettings.FIRST_PERSON)   # FPS-only mode
 	player().refill_grenades(3)
 	var everyone: Array = Net.players.keys() if Session.networked else [1]
 	for id in everyone:
