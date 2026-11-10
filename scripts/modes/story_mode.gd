@@ -55,6 +55,11 @@ func _on_clean_hands_done(summary: String) -> void:
 
 
 func minimap_markers() -> Array:
+	# Bank (green) and pawn shop (orange) are always on the map.
+	var out: Array = [
+		{"pos": world.bank_position, "color": Color(0.35, 0.85, 0.45), "kind": "place"},
+		{"pos": world.pawn_shop_position, "color": Color(1.0, 0.55, 0.15), "kind": "place"},
+	]
 	if _challenge and not _challenge.is_complete:
-		return [{"pos": _market, "color": Color(1.0, 0.8, 0.3), "kind": "objective"}]
-	return []
+		out.append({"pos": _market, "color": Color(1.0, 0.8, 0.3), "kind": "objective"})
+	return out
