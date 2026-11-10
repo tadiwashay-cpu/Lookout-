@@ -273,19 +273,25 @@ func idle_clip() -> StringName:
 		return &"fight_idle" if fight_ready and has_clip(&"fight_idle") else &"idle_unarmed"
 	if is_pistol() and has_clip(&"pistol_idle"):
 		return &"pistol_idle"
-	return &"idle"
+	return &"shotgun_idle" if has_clip(&"shotgun_idle") else &"idle"   # long guns: shooter aim set
 
 
+## Shooter pack: pistols fire with the revolver shot; long guns hold the aim
+## pose and the recoil comes from kick().
 func fire_clip() -> StringName:
-	return &"pistol_fire" if is_pistol() and has_clip(&"pistol_fire") else &"fire"
+	if is_pistol() and has_clip(&"pistol_fire"):
+		return &"pistol_fire"
+	return &"fire" if has_clip(&"fire") else idle_clip()
 
 
 func reload_clip() -> StringName:
-	return &"pistol_reload" if is_pistol() and has_clip(&"pistol_reload") else &"reload"
+	if has_clip(&"reload"):
+		return &"reload" if not is_pistol() else &"pistol_reload"
+	return &"pistol_reload" if has_clip(&"pistol_reload") else idle_clip()
 
 
 func hit_clip() -> StringName:
-	return &"hit" if armed else &"hit_unarmed"
+	return &"hit" if armed and has_clip(&"hit") else &"hit_unarmed"
 
 
 ## Pick idle / walk / run / sprint / backwards / strafe from velocity in the
@@ -307,20 +313,16 @@ func play_locomotion(local_right: float, local_forward: float) -> void:
 			clip = StringName("strafe_%s_unarmed" % ("right" if local_right > 0.0 else "left"))
 			if speed > 2.6:
 				clip = StringName("strafe_%s_run" % ("right" if local_right > 0.0 else "left"))
-	elif is_pistol():
-		if forwardish and local_forward > 0.0:
-			clip = &"pistol_walk" if speed < 2.6 else &"run_unarmed"
-		elif forwardish:
-			clip = &"walk_back" if speed < 2.4 else &"run_back"
-		else:
-			clip = StringName("strafe_%s%s" % ["right" if local_right > 0.0 else "left", "_run" if speed > 2.1 else ""])
 	else:
+		# Gun out: the shooter pack's aim-walk going forward, the RPG
+		# strafes/back-steps otherwise (the shooter pack has no strafes).
+		var aim_walk := &"pistol_walk" if is_pistol() else &"shotgun_walk"
 		if forwardish and local_forward > 0.0:
-			clip = &"shotgun_walk" if speed < 2.3 and has_clip(&"shotgun_walk") else &"run"
+			clip = aim_walk if speed < 2.6 and has_clip(aim_walk) else &"run_unarmed"
 		elif forwardish:
-			clip = &"run_back" if speed > 2.1 else &"walk_back"
+			clip = &"walk_back_unarmed" if speed < 2.4 else &"run_back"
 		else:
-			clip = StringName("strafe_%s%s" % ["right" if local_right > 0.0 else "left", "_run" if speed > 2.1 else ""])
+			clip = StringName("strafe_%s_%s" % ["right" if local_right > 0.0 else "left", "run" if speed > 2.6 else "unarmed"])
 	if not has_clip(clip):
 		clip = &"walk"
 	play(clip, clampf(speed / float(GROUND_SPEED.get(clip, 1.0)), 0.6, 1.8), 0.18)
