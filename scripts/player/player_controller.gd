@@ -112,6 +112,7 @@ var _model: Node3D
 var _wants_armed := false   # gun stays holstered until you shoot/aim (normal locomotion otherwise)
 var _holster_timer := 0.0
 var _prev_speed := 0.0
+var _move_time := 0.0
 var _stop_anim := 0.0   # a run/walk-stop clip is playing; any new input cancels it
 var _stance_check := 0.0
 var _heavy_variant := 0
@@ -453,16 +454,21 @@ func _update_facing_and_anim(move_dir: Vector3, delta: float) -> void:
 		return
 	# Natural stops: run-to-stop / walk-to-stop when you let go of the stick.
 	if _stop_anim > 0.0:
-		if speed < 0.6 and move_dir.length() < 0.1:
-			return
+		if move_dir.length() < 0.1:
+			return   # let the stop step play out while the body slows down
 		_stop_anim = 0.0
 	# _prev_speed holds the speed you had while the stick was held.
-	if not is_armed() and is_on_floor() and move_dir.length() < 0.1 and speed < 1.5:
+	if move_dir.length() > 0.1:
+		_move_time += delta
+	elif _prev_speed <= 1.0:
+		_move_time = 0.0
+	if not is_armed() and is_on_floor() and move_dir.length() < 0.1 and _prev_speed > 1.0:
 		var stop := &""
 		if _prev_speed > 4.0:
 			stop = &"run_stop"
-		elif _prev_speed > 1.0:
+		elif _move_time > 0.6:   # no stop step for quick stick taps
 			stop = &"walk_stop"
+		_move_time = 0.0
 		_prev_speed = 0.0
 		if stop != &"" and rig.has_clip(stop):
 			rig.replay(stop, 1.4, 0.12)
@@ -812,7 +818,7 @@ func _on_died() -> void:
 		current_vehicle.exit()
 	_attacking = false
 	aiming = false
-	var death := &"ko_loser" if not is_armed() and rig.has_clip(&"ko_loser") else ([&"death_back", &"death_front", &"death"][randi() % 3])
+	var death: StringName = &"ko_loser" if not is_armed() and rig.has_clip(&"ko_loser") else ([&"death_back", &"death_front", &"death"][randi() % 3])
 	if not rig.has_clip(death):
 		death = &"death"
 	if not rig.replay(death, 1.2, 0.1):
@@ -829,6 +835,7 @@ func _on_died() -> void:
 
 
 func _respawn() -> void:
+	last_attacker_peer = 0
 	global_position = spawn_point
 	velocity = Vector3.ZERO
 	_model.rotation.x = 0.0

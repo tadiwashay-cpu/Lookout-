@@ -59,9 +59,9 @@ func add_segment(from: Vector3, to: Vector3, normal: Vector3, strength: float = 
 	if x.length() < 0.1:
 		return
 	z = x.cross(up).normalized()
-	var basis := Basis(x, up, z * length)
-	var centre := (from + to) * 0.5 + up * 0.025   # just above the road: no z-fighting
-	multimesh.set_instance_transform(_next, Transform3D(basis, centre))
+	var seg_basis := Basis(x, up, z * length)
+	var centre := (from + to) * 0.5 + up * 0.04   # just above the road: no z-fighting
+	multimesh.set_instance_transform(_next, Transform3D(seg_basis, centre))
 	multimesh.set_instance_color(_next, Color(1, 1, 1, clampf(strength, 0.25, 1.0)))
 	_next = (_next + 1) % MAX_MARKS
 	multimesh.visible_instance_count = maxi(multimesh.visible_instance_count, _next if _next > 0 else MAX_MARKS)

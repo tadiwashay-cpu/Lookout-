@@ -28,6 +28,7 @@ var damage_scale := 0.7           # bots hit softer than players
 var max_health := 100.0
 var melee_only := false           # cops at 1 star try to tackle, not shoot
 var melee_damage := 12.0
+var _swing_id := 0
 
 var health: HealthComponent
 var rig: CharacterRig
@@ -239,8 +240,12 @@ func _melee() -> void:
 	rig.replay(clip, 1.5)
 	_action_lock = rig.clip_length(clip) / 1.5
 	var target := _target
+	var swing := Time.get_ticks_msec()
+	_swing_id = swing
 	# The hit lands on the swing, not the instant the bot decides to attack.
 	await get_tree().create_timer(0.3).timeout
+	if _swing_id != swing:
+		return   # interrupted (got hit) before the blow connected
 	if not is_inside_tree() or health.is_dead or target == null or not is_instance_valid(target):
 		return
 	var offset := target.global_position - global_position
@@ -282,7 +287,8 @@ func take_hit(damage: float, knockback: Vector3, attacker: Node3D, _heavy: bool 
 		_reaction = 0.2
 	if not health.is_dead:
 		rig.replay(rig.hit_clip(), 1.8, 0.05)
-		_action_lock = 0.3
+		_action_lock = maxf(_action_lock, 0.3)
+		_swing_id = 0
 
 
 func _on_died() -> void:

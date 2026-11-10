@@ -115,7 +115,7 @@ func _layout() -> void:
 		_add(&"surge", "SURGE", br + Vector2(-380, -340) * k, 66.0)
 		_add(&"block", "BLOCK", br + Vector2(-610, -150) * k, 62.0)
 		if player and player.weapons_allowed:
-			_add(&"swap_weapon", "RIFLE", br + Vector2(-110, -620) * k, 50.0)
+			_add(&"swap_weapon", "GUN", br + Vector2(-120, -600) * k, 62.0)   # draws the gun
 	_add(&"toggle_camera", "CAM", Vector2(s.x - 190, 190), 46.0)
 	if _can_interact and not _in_vehicle:
 		_add(&"interact", "ENTER", br + Vector2(-640, -340) * k, 70.0)

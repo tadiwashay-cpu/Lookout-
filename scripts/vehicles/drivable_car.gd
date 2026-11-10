@@ -468,7 +468,9 @@ func _lay_skid_marks(speed: float, handbrake: bool) -> void:
 		if not skidding or not wheel.is_in_contact():
 			_skid_last.erase(wheel)
 			continue
-		var point := wheel.get_contact_point()
+		# VehicleWheel3D's node follows the suspension, so the tyre touches
+		# the road one radius below its centre.
+		var point := wheel.global_position - global_basis.y * wheel.wheel_radius
 		if not _skid_last.has(wheel):
 			_skid_last[wheel] = point
 			continue
@@ -478,7 +480,7 @@ func _lay_skid_marks(speed: float, handbrake: bool) -> void:
 		if _skids == null or not is_instance_valid(_skids):
 			_skids = SkidMarks.instance(get_tree())
 		if _skids:
-			_skids.add_segment(last, point, wheel.get_contact_normal(), clampf(lateral / 6.0 + (0.5 if handbrake else 0.3), 0.3, 1.0))
+			_skids.add_segment(last, point, global_basis.y, clampf(lateral / 6.0 + (0.5 if handbrake else 0.3), 0.3, 1.0))
 		_skid_last[wheel] = point
 
 

@@ -220,6 +220,6 @@ func _process(delta: float) -> void:
 					bot.take_hit(4.0, -bot_offset.normalized() * 6.0, null, false)
 	var left := maxf(MATCH_TIME - _time, 0.0)
 	set_status("KOs %d / %d   •   Leader %s   •   %d:%02d" % [int(_kos.get(Session.my_id(), 0)), KO_TARGET,
-		_name_of(_leader()[0]) if not _kos.is_empty() else "-", int(left) / 60, int(left) % 60])
+		_name_of(_leader()[0]) if not _kos.is_empty() else "-", floori(left / 60.0), int(left) % 60])
 	if left <= 0.0:
 		_finish()

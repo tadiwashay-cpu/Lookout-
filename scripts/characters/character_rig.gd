@@ -166,7 +166,7 @@ func _update_weapon() -> void:
 		return
 	var hand := (skeleton.global_transform * skeleton.get_bone_global_pose(_right_hand)).orthonormalized()
 	var key := "%s|%s" % [_model_key, weapon_id]
-	if not _fit_cache.has(key) and anim and anim.current_animation == &"idle" and anim.current_animation_position > 0.25:
+	if not _fit_cache.has(key) and anim and anim.current_animation in [&"idle", &"pistol_idle", &"shotgun_idle"] and anim.current_animation_position > 0.25:
 		_fit_cache[key] = hand.affine_inverse() * _two_hand_pose()
 	var target: Transform3D
 	if _fit_cache.has(key):
