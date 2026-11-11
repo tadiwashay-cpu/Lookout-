@@ -66,7 +66,7 @@ func on_elimination_feed(victim: int, by: int) -> void:
 	if by != 0 and by != victim:
 		kills[by] = int(kills.get(by, 0)) + 1
 	var mine := by == Session.my_id() or victim == Session.my_id()
-	var text := "%s  ▸  %s" % [name_of(by), name_of(victim)] if by != 0 and by != victim else "%s is out" % name_of(victim)
+	var text := "%s  ▸  %s" % [name_of(by), name_of(victim)] if by != 0 and by != victim else ("You're out" if victim == Session.my_id() else "%s is out" % name_of(victim))
 	hud().feed(text, Color(1.0, 0.8, 0.35) if mine else Color(0.95, 0.93, 0.88))
 	if by == Session.my_id() and by != victim:
 		Audio.play_ui("click")

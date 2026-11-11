@@ -12,6 +12,7 @@ const BOT_COUNT := 9
 const BOT_WEAPONS := ["m4a1", "ak47", "mp5k", "uzi", "g36", "spas12", "m16a4"]
 
 var _center := Vector2.ZERO
+var _start_radius := 0.0
 var _time := 0.0
 var _alive: Dictionary = {}
 var _tick := 0.0
@@ -25,6 +26,10 @@ func begin() -> void:
 	var region: String = regions[rng.randi() % regions.size()]
 	var p := world.random_point_in(region, rng)
 	_center = Vector2(p.x, p.z)
+	# The first circle must cover every drop point, whatever the map size.
+	for key: String in regions:
+		for q: Vector3 in world.region_points[key]:
+			_start_radius = maxf(_start_radius, Vector2(q.x, q.z).distance_to(_center) + 120.0)
 	player().respawn_enabled = false
 	player().lock_camera_mode(GameSettings.FIRST_PERSON)   # FPS-only mode
 	# Everyone drops in with a pistol; the good guns are in the crates.
@@ -155,7 +160,10 @@ func _radius_at(t: float) -> float:
 		var a: Array = PHASES[i]
 		var b: Array = PHASES[i + 1]
 		if t <= b[0]:
-			return lerpf(a[1], b[1], clampf((t - a[0]) / maxf(b[0] - a[0], 0.01), 0.0, 1.0))
+			# Bigger maps scale every circle but the last one.
+			var k := maxf(_start_radius / float(PHASES[0][1]), 1.0)
+			var last := i + 1 == PHASES.size() - 1
+			return lerpf(a[1] * k, b[1] * (1.0 if last else k), clampf((t - a[0]) / maxf(b[0] - a[0], 0.01), 0.0, 1.0))
 	return PHASES[PHASES.size() - 1][1]
 
 
