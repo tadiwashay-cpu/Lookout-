@@ -11,6 +11,8 @@ const INTEREST := 0.02             # per in-game day
 static func build(world: World) -> void:
 	_bank(world)
 	_pawn_shop(world)
+	if world.imported_city:
+		_services(world)
 
 
 static func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color, solid := true) -> void:
@@ -117,6 +119,117 @@ static func _teller(player: PlayerController) -> void:
 			["Withdraw everything", "WITHDRAW", func() -> void: GameSettings.bank_withdraw(GameSettings.bank_balance)],
 		]
 	hud.open_menu("TELLER", refresh)
+
+
+# ------------------------------------------------------------- services
+
+## A small shop interior under the street (like the bank hall): walk in at
+## the building's door, use the counter, walk out.
+static func _room(world: World, slot: int, spot: Dictionary, title: String, wall: Color, accent: Color, counter_prompt: String, counter: Callable) -> void:
+	var door: Vector3 = spot["pos"]
+	var room := Node3D.new()
+	room.name = title.to_pascal_case()
+	world.add_child(room)
+	var o := door - Vector3(0, BANK_INTERIOR_DROP + 30.0 * (slot + 1), 0)
+	_box(room, Vector3(14, 0.4, 12), o + Vector3(0, -0.2, -4), Color(0.3, 0.3, 0.32))      # floor
+	_box(room, Vector3(14, 0.4, 12), o + Vector3(0, 4.6, -4), wall.darkened(0.2))           # ceiling
+	_box(room, Vector3(14, 4.8, 0.4), o + Vector3(0, 2.2, 2), wall)
+	_box(room, Vector3(14, 4.8, 0.4), o + Vector3(0, 2.2, -10), wall)
+	_box(room, Vector3(0.4, 4.8, 12), o + Vector3(-7, 2.2, -4), wall)
+	_box(room, Vector3(0.4, 4.8, 12), o + Vector3(7, 2.2, -4), wall)
+	_box(room, Vector3(8, 1.1, 1.0), o + Vector3(0, 0.55, -6), accent)                       # counter
+	_box(room, Vector3(10, 2.2, 0.5), o + Vector3(0, 1.4, -9.6), accent.darkened(0.3))       # shelves
+	var lamp := OmniLight3D.new()
+	lamp.position = o + Vector3(0, 3.8, -3)
+	lamp.omni_range = 13.0
+	lamp.light_energy = 1.5
+	lamp.light_color = Color(1.0, 0.94, 0.85)
+	room.add_child(lamp)
+	var board := Label3D.new()
+	board.text = title
+	board.font_size = 64
+	board.position = o + Vector3(0, 3.4, -9.3)
+	board.modulate = accent.lightened(0.5)
+	room.add_child(board)
+	var face: Vector3 = spot.get("face", Vector3.ZERO)
+	world.add_label(title, door + Vector3.UP * minf(float(spot.get("height", 6.0)) * 0.6, 6.5) - face * 1.2, 56, accent.lightened(0.45))
+	world.map_places.append({"pos": door, "text": title, "color": accent.lightened(0.3)})
+	_spot(world, door, "Enter: %s" % title.capitalize(), func(p: PlayerController) -> void: _travel(p, o + Vector3(0, 0.3, 0.2), 0.0))
+	_spot(room, o + Vector3(0, 0, 1.2), "Leave", func(p: PlayerController) -> void: _travel(p, door + face * 2.0, 0.0))
+	_spot(room, o + Vector3(0, 0, -4.6), counter_prompt, counter)
+
+
+static func _nearest_car(world: World, near: Vector3) -> DrivableCar:
+	var best: DrivableCar = null
+	var best_d := 45.0
+	for node in world.get_tree().get_nodes_in_group(&"vehicles"):
+		var car := node as DrivableCar
+		if car == null or car.is_police or car.wrecked:
+			continue
+		var d := car.global_position.distance_to(near)
+		if d < best_d:
+			best_d = d
+			best = car
+	return best
+
+
+static func _services(world: World) -> void:
+	var spots: Dictionary = world.imported_city.places
+	var hud_of := func(p: PlayerController) -> GameHUD: return p.get_tree().get_first_node_in_group(&"hud") as GameHUD
+	if spots.has("repair"):
+		var door: Vector3 = spots["repair"]["pos"]
+		_room(world, 0, spots["repair"], "AUTO REPAIR", Color(0.42, 0.44, 0.47), Color(0.85, 0.45, 0.1), "Talk to the mechanic", func(p: PlayerController) -> void:
+			var hud: GameHUD = hud_of.call(p)
+			hud.open_menu("AUTO REPAIR", func() -> Array:
+				var car := _nearest_car(world, door)
+				if car == null:
+					return [["Park your car outside the workshop first.", "", Callable()]]
+				var full: float = car.data["health"]
+				return [
+					["%s outside   •   Condition %d%%   •   Cash $%d" % [car.data["name"], int(car.health / full * 100.0), GameSettings.money], "", Callable()],
+					["Full repair", "$250", func() -> void:
+						if car.health < full and GameSettings.money >= 250:
+							GameSettings.add_money(-250)
+							car.repair()],
+					["Respray (random colour)", "$300", func() -> void:
+						if GameSettings.money >= 300:
+							GameSettings.add_money(-300)
+							var rng := RandomNumberGenerator.new()
+							rng.randomize()
+							car.call(&"_apply_paint", VehicleCatalog.random_paint(rng))],
+					["Fill the nitro bottle", "$120", func() -> void:
+						if car.nitro < 1.0 and GameSettings.money >= 120:
+							GameSettings.add_money(-120)
+							car.nitro = 1.0],
+				]))
+	if spots.has("clinic"):
+		_room(world, 1, spots["clinic"], "CITY CLINIC", Color(0.85, 0.9, 0.9), Color(0.15, 0.6, 0.55), "See the doctor", func(p: PlayerController) -> void:
+			var hud: GameHUD = hud_of.call(p)
+			hud.open_menu("CITY CLINIC", func() -> Array:
+				return [
+					["Health %d / %d   •   Cash $%d" % [int(p.health.current), int(p.health.max_health), GameSettings.money], "", Callable()],
+					["Patch me up (full health)", "$90", func() -> void:
+						if p.health.current < p.health.max_health and GameSettings.money >= 90:
+							GameSettings.add_money(-90)
+							p.health.revive()],
+				]))
+	if spots.has("diner"):
+		_room(world, 2, spots["diner"], "HARBOR DINER", Color(0.75, 0.3, 0.25), Color(0.9, 0.8, 0.3), "Order at the counter", func(p: PlayerController) -> void:
+			var hud: GameHUD = hud_of.call(p)
+			hud.open_menu("HARBOR DINER", func() -> Array:
+				return [
+					["Health %d / %d   •   Cash $%d" % [int(p.health.current), int(p.health.max_health), GameSettings.money], "", Callable()],
+					["Coffee (+15 health)", "$8", func() -> void:
+						if GameSettings.money >= 8:
+							GameSettings.add_money(-8)
+							p.health.heal(15.0)],
+					["Burger and fries (+45 health)", "$25", func() -> void:
+						if GameSettings.money >= 25:
+							GameSettings.add_money(-25)
+							p.health.heal(45.0)],
+				]))
+	if spots.has("gym"):
+		_room(world, 3, spots["gym"], "GUN STORE", Color(0.3, 0.32, 0.28), Color(0.55, 0.6, 0.3), "Talk to the dealer", func(p: PlayerController) -> void: _pawn(p))
 
 
 # ------------------------------------------------------------- pawn shop

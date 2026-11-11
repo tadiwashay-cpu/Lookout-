@@ -49,7 +49,7 @@ func _ready() -> void:
 	map_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	map_button.position = _minimap.position
 	map_button.size = Vector2(Minimap.RADIUS_PX * 2.0 + 8.0, Minimap.RADIUS_PX * 2.0 + 8.0)
-	map_button.pressed.connect(func() -> void: _full_map.open())
+	map_button.pressed.connect(func() -> void: _full_map.toggle())
 	_root.add_child(map_button)
 
 	_health_bar = ProgressBar.new()
@@ -284,6 +284,11 @@ var _menu: PanelContainer
 
 
 ## Black fade for doors/interiors. await hud.fade(true) / fade(false).
+## The touch layer calls this directly when the minimap is tapped.
+func toggle_full_map() -> void:
+	_full_map.toggle()
+
+
 func fade(to_black: bool) -> void:
 	if _fade_rect == null:
 		_fade_rect = ColorRect.new()

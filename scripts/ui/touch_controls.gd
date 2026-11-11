@@ -152,7 +152,10 @@ func _input(event: InputEvent) -> void:
 
 func _on_touch_down(index: int, pos: Vector2) -> void:
 	# Minimap (tap = full map) and the open full map are not joystick space.
-	if Rect2(20, 20, 248, 248).has_point(pos) or get_tree().get_nodes_in_group(&"full_map_open").size() > 0:
+	if Rect2(10, 10, 280, 280).has_point(pos) or get_tree().get_nodes_in_group(&"full_map_open").size() > 0:
+		var hud := get_tree().get_first_node_in_group(&"hud") as GameHUD
+		if hud:
+			hud.toggle_full_map()
 		return
 	for button in _buttons:
 		if pos.distance_to(button["pos"]) <= float(button["r"]) * 1.15:

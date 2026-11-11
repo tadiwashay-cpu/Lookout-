@@ -3,7 +3,7 @@ extends Node3D
 ## in-engine (this is what the game shows, not a Blender approximation).
 ##   godot --path . --rendering-driver opengl3 res://tools/capture/lineup.tscn -- OUT_DIR CLIP TIME
 
-const MODELS := ["x_bot", "y_bot", "npc", "civ_m_casual", "civ_m_suit", "civ_f_casual", "civ_f_formal", "civ_m_swat"]
+const MODELS := ["hero", "x_bot", "y_bot", "npc", "civ_m_casual", "civ_m_suit", "civ_f_casual", "civ_f_formal", "civ_m_swat"]
 
 
 func _ready() -> void:

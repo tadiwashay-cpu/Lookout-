@@ -11,23 +11,40 @@ var _font: Font = UITheme.HUD_FONT
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
 
 
-func open() -> void:
-	if _bounds.size == Vector2.ZERO:
-		_compute_bounds()
+var _changed_at := 0
+
+
+## One tap can arrive twice (touch + emulated mouse): ignore the echo.
+func toggle() -> void:
+	if Time.get_ticks_msec() - _changed_at < 350:
+		return
+	_changed_at = Time.get_ticks_msec()
+	if visible:
+		visible = false
+		remove_from_group(&"full_map_open")
+		return
+	_compute_bounds()
+	position = Vector2.ZERO
+	size = get_viewport_rect().size   # always the whole screen
 	visible = true
 	add_to_group(&"full_map_open")
 	queue_redraw()
 
 
+func open() -> void:
+	if not visible:
+		toggle()
+
+
 func _gui_input(event: InputEvent) -> void:
 	if (event is InputEventScreenTouch and event.pressed) or (event is InputEventMouseButton and event.pressed):
-		visible = false
-		remove_from_group(&"full_map_open")
+		if visible:
+			toggle()
 		accept_event()
 
 
@@ -48,6 +65,7 @@ func _compute_bounds() -> void:
 	for r: Rect2 in [world.map_water, world.map_forest]:
 		if r.size != Vector2.ZERO:
 			_bounds = _bounds.merge(r)
+	_bounds = _bounds.merge(World.MAP_BOUNDS)   # the whole world, not just where roads are
 	_bounds = _bounds.grow(60.0)
 
 
@@ -68,6 +86,24 @@ func _draw() -> void:
 			var a := _to_screen(r.position.x, r.position.y)
 			var b := _to_screen(r.end.x, r.end.y)
 			draw_rect(Rect2(a, b - a), pair[1])
+	# Land, then the forest and water on top of it.
+	var land_a := _to_screen(World.MAP_BOUNDS.position.x, World.MAP_BOUNDS.position.y)
+	var land_b := _to_screen(World.MAP_BOUNDS.end.x, World.MAP_BOUNDS.end.y)
+	draw_rect(Rect2(land_a, land_b - land_a), Color(0.16, 0.2, 0.15))
+	for pair in [[world.map_water, Color(0.15, 0.27, 0.38)], [world.map_forest, Color(0.1, 0.24, 0.12)], [WorldRegions.SUBURB_RECT, Color(0.24, 0.23, 0.2)]]:
+		var r: Rect2 = pair[0]
+		if r.size != Vector2.ZERO:
+			var a := _to_screen(r.position.x, r.position.y)
+			var b := _to_screen(r.end.x, r.end.y)
+			draw_rect(Rect2(a, b - a), pair[1])
+	if world.imported_city:
+		var ca := _to_screen(world.imported_city.bounds.position.x, world.imported_city.bounds.position.y)
+		var cb := _to_screen(world.imported_city.bounds.end.x, world.imported_city.bounds.end.y)
+		draw_rect(Rect2(ca, cb - ca), Color(0.2, 0.2, 0.22))
+		for building: Dictionary in world.imported_city.buildings:
+			var r: Rect2 = building["rect"]
+			var a := _to_screen(r.position.x, r.position.y)
+			draw_rect(Rect2(a, _to_screen(r.end.x, r.end.y) - a), Color(0.36, 0.36, 0.4))
 	for line in world.map_lines:
 		var pts := PackedVector2Array()
 		for p: Vector2 in line:
@@ -83,6 +119,18 @@ func _draw() -> void:
 			c += p
 		c /= points.size()
 		draw_string(_font, _to_screen(c.x, c.z), region.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, -1, 28, Color(1, 1, 1, 0.55))
+	for place: Dictionary in world.map_places:
+		var pp: Vector3 = place["pos"]
+		var sp := _to_screen(pp.x, pp.z)
+		draw_circle(sp, 6.0, place["color"])
+		draw_arc(sp, 6.0, 0.0, TAU, 12, Color(0, 0, 0, 0.8), 1.5)
+	# Legend: the places, by colour, down the right-hand side.
+	var row := 0
+	for place: Dictionary in world.map_places:
+		var at := Vector2(size.x - 330.0, 120.0 + row * 34.0)
+		draw_circle(at + Vector2(0, -8), 9.0, place["color"])
+		draw_string(_font, at + Vector2(22, 0), str(place["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.92))
+		row += 1
 	if world.mode:
 		for marker: Dictionary in world.mode.minimap_markers():
 			var mp: Vector3 = marker["pos"]

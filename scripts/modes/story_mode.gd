@@ -62,6 +62,9 @@ func minimap_markers() -> Array:
 		{"pos": world.bank_position, "color": Color(0.35, 0.85, 0.45), "kind": "place"},
 		{"pos": world.pawn_shop_position, "color": Color(1.0, 0.55, 0.15), "kind": "place"},
 	]
+	for place: Dictionary in world.map_places:
+		if not ["FIRST HARBOR BANK", "PAWN SHOP"].has(place["text"]):
+			out.append({"pos": place["pos"], "color": place["color"], "kind": "place"})
 	if _challenge and not _challenge.is_complete:
 		out.append({"pos": _market, "color": Color(1.0, 0.8, 0.3), "kind": "objective"})
 	return out

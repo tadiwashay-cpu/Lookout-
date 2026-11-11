@@ -36,6 +36,7 @@ var region_points: Dictionary = {}
 
 # Minimap data
 var map_lines: Array[PackedVector2Array] = []
+var map_places: Array = []            # [{"pos": Vector3, "text": String, "color": Color}]
 var map_water := Rect2()
 var map_forest := Rect2()
 
@@ -50,6 +51,7 @@ var _sky: ProceduralSkyMaterial
 var nature: WorldNature
 var day_night: DayNight
 var police: PoliceManager
+var city_lights: CityLights
 var _road_points: Array[Vector3] = []
 var _a_class_count := 0
 
@@ -63,6 +65,12 @@ func _ready() -> void:
 	if ImportedCity.available():
 		imported_city = ImportedCity.new(self)
 		imported_city.build()
+		if not imported_city.lamps.is_empty():
+			city_lights = CityLights.new()
+			city_lights.name = "CityLights"
+			city_lights.world = self
+			add_child(city_lights)
+			city_lights.setup(imported_city.lamps)
 	else:
 		city = WorldCity.new(self)
 		city.build()
@@ -288,6 +296,8 @@ func add_label(text: String, pos: Vector3, size: int, color: Color) -> void:
 	label.font_size = size
 	label.modulate = color
 	label.outline_size = 12
+	label.pixel_size = 0.011
+	label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y   # readable from any street
 	label.position = pos
 	label.visibility_range_end = 220.0
 	add_child(label)
@@ -533,6 +543,15 @@ func _build_ui() -> void:
 		crowd.name = "Pedestrians"
 		crowd.world = self
 		add_child(crowd)
+		var traffic := TrafficManager.new()
+		traffic.name = "Traffic"
+		traffic.world = self
+		add_child(traffic)
+	if Session.mode == Session.MODE_STORY or Session.mode == Session.MODE_BATTLE_ROYALE:
+		var wildlife := AnimalManager.new()
+		wildlife.name = "Wildlife"
+		wildlife.world = self
+		add_child(wildlife)
 
 
 func _start_mode() -> void:

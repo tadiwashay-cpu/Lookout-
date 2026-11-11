@@ -14,6 +14,7 @@ const QUALITY_MEDIUM := 1
 const QUALITY_HIGH := 2
 
 const CHARACTERS := {
+	"hero": {"name": "VVS", "scene": "res://assets/models/characters/hero.glb", "portrait": "res://assets/ui/portraits/hero_portrait.png"},
 	"x_bot": {"name": "X", "scene": "res://assets/models/characters/x_bot.glb", "portrait": "res://assets/ui/portraits/x_bot_portrait.png"},
 	"y_bot": {"name": "Y", "scene": "res://assets/models/characters/y_bot.glb", "portrait": "res://assets/ui/portraits/y_bot_portrait.png"},
 }
@@ -34,7 +35,7 @@ static func random_civilian(rng: RandomNumberGenerator) -> String:
 	return CIVILIANS_MEN[rng.randi() % CIVILIANS_MEN.size()]
 
 # --- profile
-var character: String = "x_bot"
+var character: String = "hero"
 var player_name: String = "Player"
 var money: int = 0
 var owned_weapons: Array = ["m4a1"]
@@ -98,8 +99,12 @@ func _ready() -> void:
 		master_volume = config.get_value("sound", "master", master_volume)
 		music_volume = config.get_value("sound", "music", music_volume)
 		sfx_volume = config.get_value("sound", "sfx", sfx_volume)
+	# The main character arrived in an update: switch existing saves to him once.
+	if not config.get_value("profile", "hero_intro", false):
+		character = "hero"
+		save.call_deferred()
 	if not CHARACTERS.has(character):
-		character = "x_bot"
+		character = "hero"
 	apply_all()
 
 
@@ -259,6 +264,7 @@ func vibrate(duration_ms: int) -> void:
 func save() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "character", character)
+	config.set_value("profile", "hero_intro", true)
 	config.set_value("profile", "name", player_name)
 	config.set_value("profile", "money", money)
 	config.set_value("profile", "owned_weapons", owned_weapons)

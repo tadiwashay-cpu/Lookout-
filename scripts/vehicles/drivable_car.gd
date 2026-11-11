@@ -459,6 +459,18 @@ func _blow_up_after(seconds: float) -> void:
 		explode()
 
 
+## Workshop: back to factory health, smoke and fire out.
+func repair() -> void:
+	if wrecked:
+		return
+	health = data["health"]
+	for fx in [_smoke, _fire]:
+		if fx and is_instance_valid(fx):
+			(fx as Node).queue_free()
+	_smoke = null
+	_fire = null
+
+
 func explode() -> void:
 	wrecked = true
 	remove_from_group(&"vehicles")   # a wreck can't be driven

@@ -14,7 +14,8 @@ const WATER_RECT := Rect2(335.0, -700.0, 800.0, 1200.0)
 
 # Highway centreline control points (x, z), from the city's north edge.
 const HIGHWAY_POINTS := [
-	Vector2(86, -217), Vector2(86, -300), Vector2(150, -420), Vector2(250, -520),
+	Vector2(-204, -149), Vector2(-262, -149), Vector2(-322, -172), Vector2(-350, -255), Vector2(-285, -360),
+	Vector2(-120, -430), Vector2(60, -470), Vector2(200, -545),
 	Vector2(235, -660), Vector2(80, -780), Vector2(-100, -880), Vector2(-250, -990), Vector2(-330, -1100),
 ]
 const HIGHWAY_HALF_WIDTH := 11.0
@@ -190,7 +191,8 @@ func _harbor() -> void:
 func _highway() -> void:
 	highway_samples = catmull(HIGHWAY_POINTS, 6.0)
 	for i in highway_samples.size():
-		highway_samples[i].y = HIGHWAY_Y
+		# Meets the city highway's own surface, then rises to its usual height.
+		highway_samples[i].y = lerpf(0.07, HIGHWAY_Y, clampf(i / 8.0, 0.0, 1.0))
 	_ribbon(highway_samples, HIGHWAY_HALF_WIDTH, "asphalt", true)
 	# Guardrails, dashes and lights along the curve
 	var dash := BoxMesh.new()

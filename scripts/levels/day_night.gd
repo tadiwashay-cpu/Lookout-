@@ -61,6 +61,10 @@ func _apply() -> void:
 	var elevation := sin(angle)
 	var day := smoothstep(-0.08, 0.28, elevation)
 	DrivableCar.night = clampf(1.0 - day * 1.6, 0.0, 1.0)   # car lights on from dusk
+	if world.imported_city:
+		world.imported_city.set_night(DrivableCar.night)
+	if world.city_lights:
+		world.city_lights.set_night(DrivableCar.night)
 	var dusk := clampf(1.0 - absf(elevation) * 3.5, 0.0, 1.0) * smoothstep(-0.2, 0.05, elevation)
 
 	sun.rotation = Vector3(-maxf(angle, 0.05) if elevation > 0.0 else -0.05, deg_to_rad(-38.0), 0.0)

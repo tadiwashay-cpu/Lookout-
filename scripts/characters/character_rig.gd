@@ -92,8 +92,43 @@ static func shared_clips() -> AnimationLibrary:
 		var player := carrier.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		if player and player.has_animation_library(&""):
 			_library = player.get_animation_library(&"")
+			_make_guard_idle(_library)
 		carrier.free()
 	return _library
+
+
+## The fight idle is a boxer's guard: the opening pose of the jab, held,
+## with a slow breathing bob on the hips.
+static func _make_guard_idle(library: AnimationLibrary) -> void:
+	if not library.has_animation(&"punch_1"):
+		return
+	var src := library.get_animation(&"punch_1")
+	var guard := Animation.new()
+	guard.length = 1.4
+	guard.loop_mode = Animation.LOOP_LINEAR
+	for i in src.get_track_count():
+		var kind := src.track_get_type(i)
+		if kind != Animation.TYPE_POSITION_3D and kind != Animation.TYPE_ROTATION_3D and kind != Animation.TYPE_SCALE_3D:
+			continue
+		var t := guard.add_track(kind)
+		guard.track_set_path(t, src.track_get_path(i))
+		if kind == Animation.TYPE_POSITION_3D:
+			var v := src.position_track_interpolate(i, 0.0)
+			var bob := Vector3(0.0, -0.012 * v.y, 0.0) if str(src.track_get_path(i)).ends_with("Hips") else Vector3.ZERO
+			guard.position_track_insert_key(t, 0.0, v)
+			guard.position_track_insert_key(t, 0.7, v + bob)
+			guard.position_track_insert_key(t, 1.4, v)
+		elif kind == Animation.TYPE_ROTATION_3D:
+			var q := src.rotation_track_interpolate(i, 0.0)
+			guard.rotation_track_insert_key(t, 0.0, q)
+			guard.rotation_track_insert_key(t, 1.4, q)
+		else:
+			var sc := src.scale_track_interpolate(i, 0.0)
+			guard.scale_track_insert_key(t, 0.0, sc)
+			guard.scale_track_insert_key(t, 1.4, sc)
+	if library.has_animation(&"fight_idle"):
+		library.remove_animation(&"fight_idle")
+	library.add_animation(&"fight_idle", guard)
 
 
 func setup(character_id: String, height: float = 1.8) -> void:
@@ -277,7 +312,10 @@ func _keep_feet_on_ground(delta: float) -> void:
 	var want := 0.0
 	if grounded and lowest < INF:
 		want = clampf(_lift - (lowest - floor_y), -0.4, 0.4)   # shift so that sole == floor
-	_lift = lerpf(_lift, want, clampf(delta * 15.0, 0.0, 1.0))
+	# Lift at once when a foot would go into the floor; settle down slowly, so
+	# the airborne part of a run stride does not pull the body into the ground.
+	var rate := 18.0 if want > _lift else 1.6
+	_lift = lerpf(_lift, want, clampf(delta * rate, 0.0, 1.0))
 	var holder := get_child(0) as Node3D
 	if holder and holder.get_child_count() > 0:
 		(holder.get_child(0) as Node3D).position.y = _model_base_y + _lift
