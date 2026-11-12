@@ -37,8 +37,8 @@ func _ready() -> void:
 	add_child(_panel)
 	_status = Label.new()
 	_status.add_theme_font_size_override("font_size", 24)
-	_status.position = Vector2(900, 270)
-	_status.size = Vector2(640, 560)
+	_status.position = Vector2(1180, 270)
+	_status.size = Vector2(390, 560)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD
 	add_child(_status)
 	Net.players_changed.connect(_refresh_lobby)
@@ -110,8 +110,8 @@ func _option_row(label: String, values: Array, key: String) -> void:
 		b.toggle_mode = true
 		b.button_group = group
 		b.text = {0.35: "EASY", 0.6: "MEDIUM", 0.85: "HARD"}.get(v, str(v).replace("_", " ").to_upper())
-		b.custom_minimum_size = Vector2(90, 58)
-		b.add_theme_font_size_override("font_size", 22)
+		b.custom_minimum_size = Vector2(80, 58)
+		b.add_theme_font_size_override("font_size", 20)
 		b.button_pressed = _config.get(key) == v
 		b.pressed.connect(func() -> void: _config[key] = v)
 		row.add_child(b)

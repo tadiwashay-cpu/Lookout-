@@ -70,6 +70,7 @@ func begin() -> void:
 	for r in racers:
 		if r["car"]:
 			(r["car"] as Car).exploded.connect(_on_exploded)
+			(r["car"] as Car).fell_off.connect(_put_back)
 	_build_gate()
 	Net.event_received.connect(_on_event)
 	_countdown()
@@ -260,10 +261,17 @@ func _on_grenade_blew(pos: Vector3) -> void:
 
 ## A car blew up: three seconds later it's back on the road where it died.
 func _on_exploded(car: Car) -> void:
-	var at := car.global_position
 	await get_tree().create_timer(3.0).timeout
-	if not is_instance_valid(car):
-		return
+	if is_instance_valid(car):
+		_put_back(car)
+
+
+## Back on the nearest stretch of the route, facing the right way.
+func _put_back(car: Car) -> void:
+	var at := car.global_position
+	for r in racers:
+		if r["car"] == car:
+			at = route[int(r["idx"])]
 	var best := 0
 	var best_d := INF
 	for i in range(0, route.size(), 2):

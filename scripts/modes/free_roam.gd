@@ -34,6 +34,8 @@ func begin() -> void:
 		world.call("spawn_car", CarCatalog.STREET_CARS[_rng.randi() % CarCatalog.STREET_CARS.size()], d + Vector3(4, 0.6, 0), _rng.randf() * TAU, CarCatalog.PAINTS[_rng.randi() % CarCatalog.PAINTS.size()])
 	# Nash's own ride next to him.
 	world.call("spawn_car", "sport", Layout.PLAYER_START + Vector3(4, 0.4, 3), PI * 0.5, Color(0.08, 0.08, 0.09))
+	for node in get_tree().get_nodes_in_group(&"cars"):
+		(node as Car).fell_off.connect(func(c: Car) -> void: c.reset_to(Layout.PLAYER_START + Vector3(0, 1, 20), 0.0))
 	# Hustlers on street corners.
 	for spot in [Vector3(-80 + 12, Layout.CITY_Y, 120 + 12), Vector3(280 - 12, Layout.CITY_Y, -120 + 12), Vector3(160 + 12, Layout.CITY_Y, 0 - 12)]:
 		for k in 2:

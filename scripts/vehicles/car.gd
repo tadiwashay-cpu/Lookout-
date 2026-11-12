@@ -6,6 +6,7 @@ extends VehicleBody3D
 ## Nitro, collision damage, smoke at 35%, fire at 12%, then it explodes.
 
 signal exploded(car: Car)
+signal fell_off(car: Car)
 
 var car_id := "sedan"
 var data: Dictionary
@@ -77,6 +78,8 @@ func _build() -> void:
 	var radius := 0.34
 	for node in model.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
+		if mi.name.begins_with("Wheel_") and owner_peer != 0:
+			continue   # another player's car: wheels stay plain meshes (no raycast physics)
 		if mi.name.begins_with("Wheel_"):
 			var aabb := mi.get_aabb()
 			var rel := _rel(mi)
@@ -179,6 +182,10 @@ func forward_speed() -> float:
 
 
 func _physics_process(delta: float) -> void:
+	if owner_peer != 0:
+		return   # another player's car: positioned by the network
+	if global_position.y < -30.0 or absf(global_position.x) > Layout.HALF + 400.0 or absf(global_position.z) > Layout.HALF + 400.0:
+		fell_off.emit(self)
 	if wrecked:
 		engine_force = 0.0
 		brake = 2.0

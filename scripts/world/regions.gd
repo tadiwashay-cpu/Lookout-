@@ -49,6 +49,9 @@ func _suburb(roads: Roads) -> void:
 					continue
 				if Layout.CITY_RECT.grow(20.0).has_point(Vector2(center.x, center.z)):
 					continue
+				# Never on (or right beside) another road, e.g. at crossings.
+				if _near_other_road(roads, road_name, center):
+					continue
 				var ground := Terrain.height_at(center.x, center.z)
 				var yaw: float = atan2(side_v.x * side, side_v.z * side) + PI   # front faces the road
 				var size := Vector3(rng.randf_range(10, 14), rng.randf_range(3.2, 6.4), rng.randf_range(9, 12))
@@ -92,6 +95,18 @@ func _suburb(roads: Roads) -> void:
 	var gbox := BoxMesh.new()
 	gbox.material = Mats.pbr("painted_metal_shutter", 3.0, Color(0.85, 0.85, 0.85))
 	Mats.scatter(w, gbox, garages, true, 500.0)
+
+
+func _near_other_road(roads: Roads, own: String, p: Vector3) -> bool:
+	for other: String in roads.paths:
+		if other == own:
+			continue
+		var path: Array = roads.paths[other]
+		for i in range(0, path.size(), 2):
+			var q: Vector3 = path[i]
+			if Vector2(q.x - p.x, q.z - p.z).length() < 26.0:
+				return true
+	return false
 
 
 ## A unit gable roof (ridge along X), base at y=0, height 1.
