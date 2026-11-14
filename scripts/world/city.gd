@@ -59,6 +59,7 @@ func build() -> void:
 		facade_materials.append(mat)
 	var per_facade: Array = [[], [], [], []]   # [Transform3D, Color]
 	var walk := []
+	var slabs: Array = []
 	var center := Vector2(40.0, -60.0)
 	for ix in Layout.CITY_X.size() - 1:
 		for iz in Layout.CITY_Z.size() - 1:
@@ -69,18 +70,16 @@ func build() -> void:
 			var block := Rect2(x0, z0, x1 - x0, z1 - z0)
 			walk.append(block)
 			# Sidewalk slab (with its curb), building lots inside it.
-			var slab := MeshInstance3D.new()
-			var box := BoxMesh.new()
-			box.size = Vector3(block.size.x, 0.25, block.size.y)
-			slab.mesh = box
-			slab.material_override = Mats.pbr("brushed_concrete", 3.0, Color(0.85, 0.85, 0.83))
-			slab.position = Vector3(block.get_center().x, y + 0.12, block.get_center().y)
-			slab.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			w.add_child(slab)
-			Mats.box_collider(body, slab.position, box.size)
+			var slab_pos := Vector3(block.get_center().x, y + 0.12, block.get_center().y)
+			var slab_size := Vector3(block.size.x, 0.25, block.size.y)
+			slabs.append(Transform3D(Basis.from_scale(slab_size), slab_pos))
+			Mats.box_collider(body, slab_pos, slab_size)
 			var inner := block.grow(-5.0)
 			var downtown := 1.0 - clampf(block.get_center().distance_to(center) / 380.0, 0.0, 1.0)
 			_fill_block(inner, downtown, per_facade, body)
+	var slab_box := BoxMesh.new()
+	slab_box.material = Mats.pbr("brushed_concrete", 3.0, Color(0.85, 0.85, 0.83))
+	Mats.scatter(w, slab_box, slabs, false, Game.view_distance, 400.0)   # all sidewalks: a few draw calls
 	for i in FACADES.size():
 		_flush(per_facade[i], facade_materials[i])
 	_street_lights()
@@ -187,21 +186,29 @@ func _add_building_at(lot: Rect2, base: float, height: float, per_facade: Array,
 
 
 func _flush(items: Array, mat: Material) -> void:
-	if items.is_empty():
-		return
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	var box := BoxMesh.new()
-	mm.mesh = box
-	mm.instance_count = items.size()
-	for i in items.size():
-		mm.set_instance_transform(i, items[i][0])
-		mm.set_instance_custom_data(i, items[i][1])
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	mmi.material_override = mat
-	w.add_child(mmi)
+	# One MultiMesh per 240 m cell so off-screen blocks are culled.
+	var groups: Dictionary = {}
+	for it: Array in items:
+		var o: Vector3 = (it[0] as Transform3D).origin
+		var key := Vector2i(floori(o.x / 240.0), floori(o.z / 240.0))
+		if not groups.has(key):
+			groups[key] = []
+		(groups[key] as Array).append(it)
+	for key in groups:
+		var list: Array = groups[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_custom_data = true
+		mm.mesh = BoxMesh.new()
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, list[i][0])
+			mm.set_instance_custom_data(i, list[i][1])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.material_override = mat
+		mmi.visibility_range_end = Game.view_distance + 200.0
+		w.add_child(mmi)
 
 
 func _street_distance(p: Vector2) -> float:
@@ -245,11 +252,11 @@ func _street_lights() -> void:
 	pole.height = 1.0
 	pole.radial_segments = 8
 	pole.material = Mats.flat(Color(0.12, 0.13, 0.14), 0.4, 0.8)
-	Mats.scatter(w, pole, poles, true, 350.0)
+	Mats.scatter(w, pole, poles, true, 300.0, 120.0)
 	var cap := BoxMesh.new()
 	lamp_material = Mats.glow(Color(1.0, 0.85, 0.6), 0.0).duplicate()
 	cap.material = lamp_material
-	var mmi := Mats.scatter(w, cap, heads, false, 600.0)
+	var mmi := Mats.scatter(w, cap, heads, false, 600.0, 240.0)
 	mmi.name = "LampHeads"
 
 
@@ -277,21 +284,21 @@ func _furniture(blocks: Array) -> void:
 				hyd.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU), p))
 			else:
 				bins.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU), p))
-	Mats.scatter(w, hydrant["mesh"], hyd, true, 160.0)
-	Mats.scatter(w, bin["mesh"], bins, true, 160.0)
+	Mats.scatter(w, hydrant["mesh"], hyd, false, 120.0, 120.0)
+	Mats.scatter(w, bin["mesh"], bins, false, 120.0, 120.0)
 	# Roadworks barriers and rooftop units for detail.
 	var bars: Array = []
 	for i in 14:
 		var x: float = Layout.CITY_X[rng.randi() % Layout.CITY_X.size()]
 		var z := rng.randf_range(Layout.CITY_Z[0], Layout.CITY_Z[Layout.CITY_Z.size() - 1])
 		bars.append(Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(x + Layout.STREET_W * 0.5 - 1.0, Layout.CITY_Y + 0.05, z)))
-	Mats.scatter(w, barrier["mesh"], bars, true, 200.0)
+	Mats.scatter(w, barrier["mesh"], bars, false, 160.0, 120.0)
 	var roof: Array = []
 	for b in buildings:
-		if rng.randf() < 0.5:
+		if rng.randf() < 0.25:
 			var r: Rect2 = b["rect"]
 			roof.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(r.get_center().x + rng.randf_range(-3, 3), Layout.CITY_Y + 0.25 + float(b["height"]), r.get_center().y + rng.randf_range(-3, 3))))
-	Mats.scatter(w, aircon["mesh"], roof, false, 300.0)
+	Mats.scatter(w, aircon["mesh"], roof, false, 220.0, 120.0)
 
 
 func set_night(amount: float) -> void:

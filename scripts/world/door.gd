@@ -50,6 +50,11 @@ static func travel(p: Player, to: Vector3, yaw: float) -> void:
 	if hud:
 		await hud.call("fade", true)
 	p.global_position = to
+	if p.cam:
+		p.cam.global_position = to + Vector3(0, 2, 3)
+	var world := p.get_tree().get_first_node_in_group(&"world")
+	if world:
+		world.call("_cull_far")
 	p.velocity = Vector3.ZERO
 	p.rotation.y = yaw
 	if p.cam:

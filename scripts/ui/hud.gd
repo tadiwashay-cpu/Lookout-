@@ -129,7 +129,15 @@ func _bar(pos: Vector2, color: Color) -> ProgressBar:
 	return b
 
 
+var _fps_label: Label
+
+
 func _process(delta: float) -> void:
+	if Game.show_fps:
+		if _fps_label == null:
+			_fps_label = _label(20, HORIZONTAL_ALIGNMENT_RIGHT)
+			pin(_fps_label, Vector2(1.0, 0.0), Vector2(-420, 84), Vector2(320, 26))
+		_fps_label.text = "%d FPS  •  %d%% res" % [Engine.get_frames_per_second(), int(Game.render_scale * 100.0)]
 	if player == null:
 		return
 	_health.value = player.health / player.max_health * 100.0
@@ -343,8 +351,13 @@ class Radar:
 		size = Vector2(R * 2.0, R * 2.0)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	func _process(_d: float) -> void:
-		queue_redraw()
+	var _tick := 0.0
+
+	func _process(d: float) -> void:
+		_tick -= d
+		if _tick <= 0.0:
+			_tick = 1.0 / 12.0   # the radar doesn't need 60 redraws a second
+			queue_redraw()
 
 	func _draw() -> void:
 		if world == null or player == null:

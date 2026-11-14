@@ -74,13 +74,13 @@ func build() -> void:
 		l.spot_range = 30.0
 		l.spot_angle = 35.0
 		l.light_energy = 4.0
-		l.shadow_enabled = Game.quality >= 2
+		l.shadow_enabled = Game.quality >= 3   # four shadowed spots redraw the scene four times
 	# The crowd.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	var clips := [&"Dance", &"Yes", &"Idle_Talking", &"Idle_FoldArms", &"Punch_Enter", &"Idle_No"]
-	for i in 18:
-		var ang := i * TAU / 18.0 + rng.randf_range(-0.1, 0.1)
+	for i in 14:
+		var ang := i * TAU / 14.0 + rng.randf_range(-0.1, 0.1)
 		var r := HALF + rng.randf_range(3.0, 5.5)
 		var h := Humanoid.new()
 		add_child(h)
@@ -88,6 +88,8 @@ func build() -> void:
 		h.rotation.y = atan2(-h.position.x, -h.position.z)
 		h.setup(Humanoid.random_npc(rng), rng.randf_range(1.65, 1.85))
 		h.play(clips[rng.randi() % clips.size()], 0.0, rng.randf_range(0.85, 1.15))
+		for mi in h.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # crowd: no shadow pass
 		crowd.append(h)
 
 

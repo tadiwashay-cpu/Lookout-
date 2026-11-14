@@ -89,6 +89,9 @@ func _interior(kind: String, info: Dictionary) -> Node3D:
 	w.add_child(room)
 	var o := Vector3(_slot * 60.0, DEPTH, 0)
 	_slot += 1
+	room.add_to_group(&"interiors")
+	room.set_meta(&"cx", o.x)
+	room.visible = false
 	var size := Vector3(22, 6, 18)
 	var body := StaticBody3D.new()
 	body.collision_layer = Game.L_WORLD
@@ -161,6 +164,8 @@ func _staff(room: Node3D, pos: Vector3, yaw: float, clip: StringName, model: Str
 	rng.randomize()
 	h.setup(model if model != "" else Humanoid.random_npc(rng), 1.75)
 	h.play(clip)
+	for mi in h.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return h
 
 

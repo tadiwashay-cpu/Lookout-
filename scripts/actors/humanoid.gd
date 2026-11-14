@@ -56,6 +56,7 @@ static func library() -> AnimationLibrary:
 
 
 func setup(model_path: String, height: float = 1.8) -> void:
+	add_to_group(&"humanoids")
 	model = (load(model_path) as PackedScene).instantiate() as Node3D
 	add_child(model)
 	skeleton = model.find_child("GeneralSkeleton", true, false) as Skeleton3D
@@ -76,7 +77,7 @@ func setup(model_path: String, height: float = 1.8) -> void:
 			if top > 0.1:
 				model.scale *= (height * 0.88) / top
 	for mi in model.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).visibility_range_end = 180.0
+		(mi as MeshInstance3D).visibility_range_end = 120.0
 
 
 static func random_npc(rng: RandomNumberGenerator) -> String:

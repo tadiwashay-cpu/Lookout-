@@ -17,7 +17,8 @@ const L_BARRIER := 16       # blocks characters, not the camera
 
 var player_name := "Nash"
 var money := 500
-var quality := 1            # 0 low, 1 medium, 2 high
+var quality := 2            # 0 low, 1 medium, 2 high, 3 ultra
+var show_fps := false
 var look_sensitivity := 1.0
 var view_distance := 900.0
 
@@ -32,6 +33,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_inputs()
 	_load()
+	render_scale = preset()["scale"]
 
 
 # ------------------------------------------------------------------ profile
@@ -47,6 +49,7 @@ func save() -> void:
 	c.set_value("profile", "money", money)
 	c.set_value("settings", "quality", quality)
 	c.set_value("settings", "look", look_sensitivity)
+	c.set_value("settings", "fps", show_fps)
 	c.save(SAVE_PATH)
 
 
@@ -58,7 +61,72 @@ func _load() -> void:
 	money = c.get_value("profile", "money", money)
 	quality = c.get_value("settings", "quality", quality)
 	look_sensitivity = c.get_value("settings", "look", look_sensitivity)
-	view_distance = [550.0, 900.0, 1400.0][clampi(quality, 0, 2)]
+	show_fps = c.get_value("settings", "fps", show_fps)
+	quality = clampi(quality, 0, 3)
+	view_distance = preset()["view"]
+
+
+# ---------------------------------------------------------------- graphics
+
+## Graphics presets. The 3D scene renders at `scale` x screen resolution and
+## FSR sharpens it back up (phones/tablets have far more pixels than their
+## GPUs can shade at 60 fps); the governor lowers the scale only while the
+## frame rate dips, then climbs back to the preset's `scale`.
+const PRESETS := [
+	{"name": "LOW", "scale": 0.62, "min_scale": 0.5, "msaa": 0, "shadow": 0.0, "shadow_size": 1024, "glow": false, "view": 550.0, "trees": 0.45},
+	{"name": "MEDIUM", "scale": 0.75, "min_scale": 0.55, "msaa": 0, "shadow": 55.0, "shadow_size": 2048, "glow": false, "view": 750.0, "trees": 0.7},
+	{"name": "HIGH", "scale": 0.85, "min_scale": 0.6, "msaa": 1, "shadow": 75.0, "shadow_size": 2048, "glow": true, "view": 900.0, "trees": 1.0},
+	{"name": "ULTRA", "scale": 1.0, "min_scale": 0.7, "msaa": 2, "shadow": 120.0, "shadow_size": 4096, "glow": true, "view": 1200.0, "trees": 1.0},
+]
+var render_scale := 1.0
+
+
+func preset() -> Dictionary:
+	return PRESETS[clampi(quality, 0, PRESETS.size() - 1)]
+
+
+func set_quality(q: int) -> void:
+	quality = clampi(q, 0, PRESETS.size() - 1)
+	view_distance = preset()["view"]
+	render_scale = preset()["scale"]
+
+
+## Viewport-level settings (called by the world).
+func apply_viewport(vp: Viewport) -> void:
+	var p := preset()
+	render_scale = clampf(render_scale if render_scale > 0.0 else p["scale"], p["min_scale"], p["scale"])
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+	vp.scaling_3d_scale = render_scale
+	vp.fsr_sharpness = 0.35
+	vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][int(p["msaa"])]
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+	vp.mesh_lod_threshold = 2.0 if quality < 2 else 1.0
+	RenderingServer.directional_shadow_atlas_set_size(int(p["shadow_size"]), true)
+	Engine.max_fps = 60
+
+
+var _fps_time := 0.0
+var _fps_frames := 0
+
+
+## Dynamic resolution: keep 60 fps by trading a little sharpness, never
+## more than the preset allows, and give it back when there's headroom.
+func govern_resolution(vp: Viewport, delta: float) -> void:
+	_fps_time += delta / maxf(Engine.time_scale, 0.05)
+	_fps_frames += 1
+	if _fps_time < 1.5:
+		return
+	var fps := _fps_frames / _fps_time
+	_fps_time = 0.0
+	_fps_frames = 0
+	var p := preset()
+	var before := render_scale
+	if fps < 52.0:
+		render_scale = maxf(render_scale - 0.05, p["min_scale"])
+	elif fps > 58.5:
+		render_scale = minf(render_scale + 0.025, p["scale"])
+	if render_scale != before:
+		vp.scaling_3d_scale = render_scale
 
 
 # -------------------------------------------------------------------- flow

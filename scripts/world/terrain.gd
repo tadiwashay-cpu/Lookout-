@@ -4,7 +4,7 @@ extends RefCounted
 ## flat city and harbour, the beach and the sea floor) flattened under roads.
 ## Drawn as chunked meshes with a splat shader; collides as one heightmap.
 
-const CHUNK := 30                         # cells per mesh chunk (240 m)
+const CHUNK := 50                         # cells per mesh chunk (400 m): few draw calls
 
 static var _n_low := FastNoiseLite.new()
 static var _n_hill := FastNoiseLite.new()
@@ -174,5 +174,6 @@ static func _chunk(cx: int, cz: int, mat: Material) -> MeshInstance3D:
 	mi.mesh = st.commit()
 	mi.material_override = mat
 	mi.visibility_range_end = Game.view_distance + 250.0
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # (the land only shadows itself)
 	mi.name = "Land_%d_%d" % [cx, cz]
 	return mi

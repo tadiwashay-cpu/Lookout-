@@ -104,21 +104,35 @@ static func _xform_to(root: Node, node: Node3D) -> Transform3D:
 	return xf
 
 
-## Drops many copies of a mesh into the world as one MultiMesh.
-static func scatter(parent: Node, mesh: Mesh, transforms: Array, shadows: bool = true, range_end: float = 0.0) -> MultiMeshInstance3D:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = transforms.size()
-	for i in transforms.size():
-		mm.set_instance_transform(i, transforms[i])
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	if range_end > 0.0:
-		mmi.visibility_range_end = range_end
-	parent.add_child(mmi)
-	return mmi
+## Drops many copies of a mesh into the world as MultiMeshes, one per map
+## cell, so each cell is culled on its own (off screen or beyond
+## `range_end`). Returns the last instance made.
+static func scatter(parent: Node, mesh: Mesh, transforms: Array, shadows: bool = true, range_end: float = 0.0, cell: float = 160.0) -> MultiMeshInstance3D:
+	var groups: Dictionary = {}
+	for xf: Transform3D in transforms:
+		var key := Vector2i(floori(xf.origin.x / cell), floori(xf.origin.z / cell))
+		if not groups.has(key):
+			groups[key] = []
+		(groups[key] as Array).append(xf)
+	var last: MultiMeshInstance3D
+	for key in groups:
+		var list: Array = groups[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, list[i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if range_end > 0.0:
+			mmi.visibility_range_end = range_end
+			mmi.visibility_range_end_margin = range_end * 0.08
+			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		parent.add_child(mmi)
+		last = mmi
+	return last
 
 
 ## Solid box collider (one shape on a shared body).

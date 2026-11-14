@@ -200,10 +200,13 @@ func _settings() -> void:
 	name_edit.add_theme_font_size_override("font_size", 28)
 	name_edit.text_changed.connect(func(t: String) -> void: Game.player_name = t.left(16))
 	_panel.add_child(name_edit)
-	var q := {"quality": Game.quality}
-	_option_row_settings("GRAPHICS", ["LOW", "MEDIUM", "HIGH"], Game.quality, func(i: int) -> void:
-		Game.quality = i
-		Game.view_distance = [550.0, 900.0, 1400.0][i])
+	_option_row_settings("GRAPHICS", ["LOW", "MEDIUM", "HIGH", "ULTRA"], Game.quality, func(i: int) -> void: Game.set_quality(i))
+	_option_row_settings("FPS COUNTER", ["OFF", "ON"], 1 if Game.show_fps else 0, func(i: int) -> void: Game.show_fps = i == 1)
+	var note := Label.new()
+	note.text = "Resolution adapts automatically to hold 60 fps (it only drops while a scene is heavy)."
+	note.add_theme_font_size_override("font_size", 20)
+	note.modulate = Color(1, 1, 1, 0.6)
+	_panel.add_child(note)
 	_button("SAVE", func() -> void: Game.save(); _home())
 
 

@@ -161,13 +161,18 @@ func _track(r: Dictionary) -> void:
 		if d < best_d:
 			best_d = d
 			best = j
-	if best < route.size() / 4 and start > route.size() * 3 / 4 and race_time > 10.0:
+	# A lap only counts once most of the loop has really been driven (the
+	# grid sits right behind the line, which is also the end of the loop).
+	if best < route.size() / 4 and start > route.size() * 3 / 4 and int(r.get("max", 0)) > route.size() * 0.6:
+		r["max"] = 0
 		r["lap"] = int(r["lap"]) + 1
 		if int(r["lap"]) >= laps:
 			r["done"] = true
 			r["time"] = race_time
 			Net.send_event("finish", {"id": r["id"], "time": race_time})
 	r["idx"] = best
+	if best < route.size() * 0.95 or int(r.get("max", 0)) > route.size() * 0.5:
+		r["max"] = maxi(int(r.get("max", 0)), best)
 	r["cp"] = best * checkpoints.size() / route.size()
 
 

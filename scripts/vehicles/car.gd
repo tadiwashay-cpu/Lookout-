@@ -17,7 +17,8 @@ var wrecked := false
 var nitro := 0.5
 var nitro_on := false
 var owner_peer := 0               # network owner (0 = local)
-var exit_locked := false          # races: no getting out
+var exit_locked := false
+var _park_tick := randf() * 0.5          # races: no getting out
 
 # AI / remote inputs (-1..1)
 var ai_enabled := false
@@ -55,7 +56,7 @@ func _ready() -> void:
 	contact_monitor = true
 	max_contacts_reported = 4
 	body_entered.connect(_on_hit)
-	can_sleep = false
+	can_sleep = true          # parked cars cost nothing until touched
 	_build()
 	_engine = AudioStreamPlayer3D.new()
 	_engine.stream = Sfx.streams.get("engine")
@@ -122,17 +123,6 @@ func _build() -> void:
 		col.position = xf * box.get_center() + Vector3.UP * size.y * 0.12
 		if paint.a > 0.0:
 			_repaint(paint)
-	# Headlights.
-	for side in [-0.6, 0.6]:
-		var l := SpotLight3D.new()
-		l.position = Vector3(side, 0.7, 2.1)
-		l.rotation = Vector3(-0.08, PI, 0)
-		l.spot_range = 45.0
-		l.spot_angle = 32.0
-		l.light_energy = 0.0
-		l.light_color = Color(1.0, 0.95, 0.85)
-		add_child(l)
-		_lights.append(l)
 
 
 ## Transform of a model node relative to the car body (no globals: they
@@ -162,13 +152,39 @@ func _repaint(color: Color) -> void:
 
 func set_driver(d: Node) -> void:
 	driver = d
+	freeze = false
 	sleeping = false
+	_ensure_headlights()
 	if d == null:
 		in_throttle = 0.0
 		in_brake = 0.0
 
 
+static var night_lights := false
+
+
+## Real headlights only on cars someone is driving (dozens of parked cars
+## with spot lights would cost more than the whole city).
+func _ensure_headlights() -> void:
+	if not _lights.is_empty() or owner_peer != 0:
+		return
+	for side in [-0.6, 0.6]:
+		var l := SpotLight3D.new()
+		l.position = Vector3(side, 0.7, 2.1)
+		l.rotation = Vector3(-0.08, PI, 0)
+		l.spot_range = 45.0
+		l.spot_angle = 32.0
+		l.light_color = Color(1.0, 0.95, 0.85)
+		l.light_energy = 3.0 if night_lights else 0.0
+		l.distance_fade_enabled = true
+		l.distance_fade_begin = 80.0
+		l.distance_fade_length = 20.0
+		add_child(l)
+		_lights.append(l)
+
+
 func lights(on: bool) -> void:
+	night_lights = on
 	for l in _lights:
 		l.light_energy = 3.0 if on else 0.0
 
@@ -190,6 +206,24 @@ func _physics_process(delta: float) -> void:
 		engine_force = 0.0
 		brake = 2.0
 		return
+	if driver == null and not ai_enabled:
+		_park_tick -= delta
+		if _park_tick <= 0.0:
+			_park_tick = 0.5
+			# Parked and nobody near: take it out of the simulation entirely.
+			var cam := get_viewport().get_camera_3d()
+			var far := cam == null or cam.global_position.distance_to(global_position) > 45.0
+			var still := linear_velocity.length() < 0.3
+			if far and still and not freeze:
+				freeze = true
+			elif not far and freeze and not wrecked:
+				freeze = false
+		if sleeping or freeze:
+			if _engine.playing:
+				_engine.stop()
+			return   # parked
+	if ai_enabled and _lights.is_empty():
+		_ensure_headlights()
 	if driver and driver is Player:
 		_read_player()
 	elif not ai_enabled and owner_peer == 0:

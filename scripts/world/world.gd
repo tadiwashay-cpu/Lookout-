@@ -20,6 +20,7 @@ var time_of_day := 0.42           # 0 midnight .. 0.5 noon
 var rng := RandomNumberGenerator.new()
 var _lamp_pool: Array[OmniLight3D] = []
 var _lamp_tick := 0.0
+var _cull_tick := 0.0
 
 
 func _ready() -> void:
@@ -27,6 +28,7 @@ func _ready() -> void:
 	var seed_value := 20261112        # the map is the same for everyone
 	rng.seed = int(Game.match_config.get("seed", 1))
 	Terrain.setup(seed_value)
+	Game.apply_viewport(get_viewport())
 	_environment()
 	roads = Roads.new()
 	roads.build_paths()
@@ -68,7 +70,12 @@ func _environment() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 0.85
 	env.tonemap_white = 6.0
-	env.glow_enabled = true
+	env.glow_enabled = bool(Game.preset()["glow"])
+	env.set_glow_level(0, 0.0)
+	env.set_glow_level(1, 0.0)
+	env.set_glow_level(2, 1.0)
+	env.set_glow_level(3, 0.6)
+	env.set_glow_level(4, 0.0)
 	env.glow_intensity = 0.35
 	env.glow_bloom = 0.05
 	env.fog_enabled = true
@@ -83,8 +90,12 @@ func _environment() -> void:
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 90.0 if Game.quality < 2 else 160.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	var shadow: float = Game.preset()["shadow"]
+	sun.shadow_enabled = shadow > 0.0
+	sun.directional_shadow_max_distance = maxf(shadow, 1.0)
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if Game.quality >= 3 else DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_fade_start = 0.8
+	sun.shadow_blur = 1.0
 	sun.light_energy = 1.3
 	add_child(sun)
 	_apply_time()
@@ -114,6 +125,24 @@ func _apply_time() -> void:
 		l.visible = night > 0.4
 
 
+## Characters far from the camera stop animating (they're hidden by their
+## visibility range anyway); interiors only exist while you're inside.
+func _cull_far() -> void:
+	var cam_pos := get_viewport().get_camera_3d().global_position if get_viewport().get_camera_3d() else Vector3.ZERO
+	for node in get_tree().get_nodes_in_group(&"humanoids"):
+		var h := node as Humanoid
+		if h.anim == null or h.get_parent() is Fighter and (h.get_parent() as Fighter) == player:
+			continue
+		var near := h.global_position.distance_to(cam_pos) < 90.0
+		if h.anim.active != near:
+			h.anim.active = near
+	for room in get_tree().get_nodes_in_group(&"interiors"):
+		var r := room as Node3D
+		var inside := cam_pos.y < Services.DEPTH + 60.0 and Vector2(cam_pos.x - float(r.get_meta(&"cx")), cam_pos.z).length() < 40.0
+		if r.visible != inside:
+			r.visible = inside   # (collisions stay on: you arrive before the camera does)
+
+
 func _street_light_pool() -> void:
 	for i in 8:
 		var l := OmniLight3D.new()
@@ -126,6 +155,11 @@ func _street_light_pool() -> void:
 
 
 func _process(delta: float) -> void:
+	Game.govern_resolution(get_viewport(), delta)
+	_cull_tick -= delta
+	if _cull_tick <= 0.0:
+		_cull_tick = 0.4
+		_cull_far()
 	if Game.mode() == Game.Mode.FREE_ROAM:
 		time_of_day = fmod(time_of_day + delta / (24.0 * 60.0), 1.0)   # 24-minute day
 		_lamp_tick -= delta

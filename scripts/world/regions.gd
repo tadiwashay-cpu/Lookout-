@@ -91,10 +91,10 @@ func _suburb(roads: Roads) -> void:
 	mmi.visibility_range_end = 700.0
 	w.add_child(mmi)
 	roof_mesh.surface_set_material(0, Mats.pbr("clay_roof_tiles", 3.0))
-	Mats.scatter(w, roof_mesh, roofs, true, 700.0)
+	Mats.scatter(w, roof_mesh, roofs, true, 600.0, 200.0)
 	var gbox := BoxMesh.new()
 	gbox.material = Mats.pbr("painted_metal_shutter", 3.0, Color(0.85, 0.85, 0.85))
-	Mats.scatter(w, gbox, garages, true, 500.0)
+	Mats.scatter(w, gbox, garages, true, 450.0, 200.0)
 
 
 func _near_other_road(roads: Roads, own: String, p: Vector3) -> bool:
@@ -203,7 +203,7 @@ func _harbour() -> void:
 	var barrels: Array = []
 	for i in 40:
 		barrels.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(rng.randf_range(r.position.x + 20, Layout.SHORE_X - 30), y, rng.randf_range(r.position.y + 90, r.end.y - 20))))
-	Mats.scatter(w, Mats.prop("barrel_01")["mesh"], barrels, true, 180.0)
+	Mats.scatter(w, Mats.prop("barrel_01")["mesh"], barrels, false, 140.0, 120.0)
 
 
 func _box(center: Vector3, size: Vector3, mat: Material, solid: bool) -> void:
@@ -262,10 +262,10 @@ func _forest(roads: Roads) -> void:
 		if not chunks.has(key):
 			chunks[key] = [[], []]
 		(chunks[key][rng.randi() % 2] as Array).append(xf)
-		if rng.randf() < 0.05:
+		if rng.randf() < 0.012:
 			rocks.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(0.6, 1.8)), Vector3(x + 3, h - 0.3, z + 2)))
 	# The forest: dense (about one tree every 9 m), in clumps and clearings.
-	var forest_count := 9000 if Game.quality >= 1 else 4500
+	var forest_count := int(9000.0 * float(Game.preset()["trees"]))
 	var r := Layout.FOREST_RECT
 	for i in forest_count:
 		var x := rng.randf_range(r.position.x, r.end.x)
@@ -274,16 +274,16 @@ func _forest(roads: Roads) -> void:
 			continue   # clearing
 		place.call(x, z)
 	# Scattered trees on the other hills.
-	for i in 2500:
+	for i in int(2500.0 * float(Game.preset()["trees"])):
 		place.call(rng.randf_range(-Layout.HALF + 20, Layout.SHORE_X - 20), rng.randf_range(-Layout.HALF + 20, Layout.HALF - 20))
 	for key in chunks:
 		for k in 2:
 			var list: Array = chunks[key][k]
 			if list.is_empty():
 				continue
-			var mmi := Mats.scatter(w, mesh if k == 0 else mesh_b, list, true, 700.0)
+			var mmi := Mats.scatter(w, mesh if k == 0 else mesh_b, list, true, minf(Game.view_distance * 0.75, 650.0), 320.0)
 			mmi.visibility_range_end_margin = 60.0
-	Mats.scatter(w, Mats.prop("rock_moss_set_01")["mesh"], rocks, true, 300.0)
+	Mats.scatter(w, Mats.prop("rock_moss_set_01")["mesh"], rocks, false, 220.0, 150.0)
 	var boulders: Array = []
 	for i in 120:
 		var x := rng.randf_range(-Layout.HALF + 50, Layout.SHORE_X)
@@ -292,7 +292,7 @@ func _forest(roads: Roads) -> void:
 		if roads.influence(x, z).x > 0.01:
 			continue
 		boulders.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(2.0, 6.0)), Vector3(x, h - 0.5, z)))
-	Mats.scatter(w, Mats.prop("boulder_01")["mesh"], boulders, true, 600.0)
+	Mats.scatter(w, Mats.prop("boulder_01")["mesh"], boulders, false, 500.0, 200.0)
 
 
 ## Two crossed vertical quads, `h` tall and `half` wide, UV 0..1.
