@@ -1,0 +1,20 @@
+Uppercut|a person in a boxing stance throws a powerful right uppercut punch upward
+Haymaker|a person winds up and throws a big wide right haymaker punch
+BodyHook|a boxer bends his knees and throws a left hook to the body
+OneTwo|a boxer quickly throws a left jab followed by a right cross punch
+Elbow|a person steps forward and strikes with his right elbow
+Knee|a person grabs something in front and drives his right knee up into it
+FrontKick|a person lifts his right leg and kicks straight forward with force
+Roundhouse|a person does a high roundhouse kick with the right leg
+SpinKick|a person spins around and does a spinning back kick
+LowKick|a person kicks low with the left leg toward the shin
+FlyingKnee|a person runs two steps forward and jumps with a flying knee
+Shove|a person pushes forward hard with both hands
+Slam|a person bends down, lifts something heavy over his shoulder and throws it to the ground
+Stomp|a person raises his right foot and stomps down hard on the ground
+Duck|a boxer ducks down quickly to dodge and stands back up in a fighting stance
+Stumble|a person gets hit in the face and stumbles backward
+FallBack|a person is knocked backward and falls onto his back on the ground
+Taunt|a person beckons with his right hand, gesturing to come here
+Flex|a person raises both arms and flexes his muscles in celebration
+Guard|a boxer bounces lightly on his feet with his fists raised in a guard

@@ -102,6 +102,8 @@ func _scoreline() -> String:
 ## A local fighter (us or a bot) went down.
 func _on_ko(victim: Fighter, attacker: Fighter) -> void:
 	var by := attacker.fighter_id if attacker else -1
+	if attacker and is_instance_valid(attacker):
+		attacker.celebrate()
 	Net.send_event("ko", {"victim": victim.fighter_id, "by": by})
 	var spot := ring.corner(randi() % 8)
 	await get_tree().create_timer(3.0).timeout

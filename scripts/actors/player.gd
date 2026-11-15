@@ -149,21 +149,27 @@ func finisher(target: Fighter) -> void:
 	if not can_act():
 		return
 	_set_state(State.FINISHER)
-	_finisher_time = 1.6
+	_finisher_time = 2.0
 	var d := target.global_position - global_position
 	rotation.y = atan2(d.x, d.z)
 	if cam:
-		cam.cinema((global_position + target.global_position) * 0.5, 1.6)
+		cam.cinema((global_position + target.global_position) * 0.5, 2.0)
 	Game.slowmo(0.35, 0.55)
 	Sfx.play("surge", global_position, -2.0, 1.4)
-	var seq := [[&"Punch_Jab", 0.0], [&"Punch_Cross", 0.18], [&"Melee_Hook", 0.36]]
+	# Knee to fold them, uppercut to stand them up, spinning kick to send them.
+	var seq := [["knee", 0.0], ["uppercut", 0.3], ["spin_kick", 0.62]]
 	for step in seq:
-		var t := get_tree().create_timer(float(step[1]), true, false, false)
+		var move := Fighter.generated_attack(step[0])
+		var lead := float(move["start"])
+		var show := get_tree().create_timer(float(step[1]), true, false, false)
+		show.timeout.connect(func() -> void:
+			if body.has(move["clip"]):
+				body.one_shot(move["clip"], float(move["speed"]), 0.05, float(move["from"])))
+		var t := get_tree().create_timer(float(step[1]) + lead, true, false, false)
 		t.timeout.connect(func() -> void:
 			if not is_instance_valid(target):
 				return
-			body.one_shot(step[0], 1.6, 0.03)
-			var last: bool = step[0] == &"Melee_Hook"
+			var last: bool = step[0] == "spin_kick"
 			var dmg := target.health + 5.0 if last and target.health < target.max_health * 0.35 else (8.0 if not last else 40.0)
 			target.receive_hit(dmg, global_basis.z * (16.0 if last else 1.0) + (Vector3.UP * 6.0 if last else Vector3.ZERO), self, last)
 			CameraRig.shake_all(1.2 if last else 0.4)
@@ -171,7 +177,7 @@ func finisher(target: Fighter) -> void:
 				Game.hitstop(0.12)
 				Fx.shockwave(get_parent(), target.global_position + Vector3.UP, 3.0)
 				surge = minf(surge + 25.0, 100.0))
-	var done := get_tree().create_timer(0.9, true, false, false)
+	var done := get_tree().create_timer(1.45, true, false, false)
 	done.timeout.connect(func() -> void:
 		if state == State.FINISHER:
 			_set_state(State.FREE)

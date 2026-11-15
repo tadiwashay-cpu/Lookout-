@@ -9,7 +9,7 @@ const NASH := "res://assets/characters/nash.glb"
 const NPC_DIR := "res://assets/characters/npc/"
 const NPCS := ["civ_m_casual", "civ_m_casual2", "civ_m_suit", "civ_m_worker", "civ_m_punk", "civ_m_beach",
 	"civ_m_farmer", "civ_m_adventurer", "civ_f_casual", "civ_f_formal", "civ_f_suit", "civ_f_worker", "civ_f_punk", "civ_f_adventurer"]
-const LIBRARIES := ["res://assets/animations/ual1.glb", "res://assets/animations/ual2.glb"]
+const LIBRARIES := ["res://assets/animations/ual1.glb", "res://assets/animations/ual2.glb", "res://assets/animations/fight_gen.glb"]
 
 static var _library: AnimationLibrary
 
@@ -47,12 +47,36 @@ static func library() -> AnimationLibrary:
 							a.remove_track(t)
 							continue
 						a.track_set_path(t, NodePath("%GeneralSkeleton:" + bone))
+					if str(clip_name).begins_with("Fx_"):
+						_fix_generated(a)
 					if str(clip_name).ends_with("_Loop") or str(clip_name) in ["Sword_Idle", "Driving_Loop"]:
 						a.loop_mode = Animation.LOOP_LINEAR
 					if not _library.has_animation(clip_name):
 						_library.add_animation(clip_name, a)
 		scene.free()
 	return _library
+
+
+## Generated (text-to-motion) clips: the source skeleton's rest pose has its
+## hips at the wrong height, so the retargeted hips float. Rescale the hips
+## track to standing height and keep the move on the spot (the Fighter
+## moves the body; the clip only poses it).
+static func _fix_generated(a: Animation) -> void:
+	for t in a.get_track_count():
+		if a.track_get_type(t) != Animation.TYPE_POSITION_3D or not str(a.track_get_path(t)).ends_with(":Hips"):
+			continue
+		var n := a.track_get_key_count(t)
+		if n == 0:
+			return
+		var heights: Array[float] = []
+		for k in n:
+			heights.append((a.track_get_key_value(t, k) as Vector3).y)
+		heights.sort()
+		var standing: float = heights[int(n * 0.8)]      # upright for most of every clip
+		var scale := 0.955 / maxf(standing, 0.01)
+		for k in n:
+			var v: Vector3 = a.track_get_key_value(t, k)
+			a.track_set_key_value(t, k, Vector3(0.0, v.y * scale, 0.0))
 
 
 func setup(model_path: String, height: float = 1.8) -> void:
@@ -103,14 +127,16 @@ func play(clip: StringName, blend: float = -1.0, speed: float = 1.0, force: bool
 
 
 ## Play once; locomotion calls are ignored until it finishes.
-func one_shot(clip: StringName, speed: float = 1.0, blend: float = 0.08) -> float:
+func one_shot(clip: StringName, speed: float = 1.0, blend: float = 0.08, from: float = 0.0) -> float:
 	if anim == null or not anim.has_animation(clip):
 		return 0.0
 	_one_shot = true
 	current = clip
 	anim.play(clip, blend)
 	anim.speed_scale = speed
-	return anim.get_animation(clip).length / maxf(speed, 0.01)
+	if from > 0.0:
+		anim.seek(from)      # skip a clip's wind-up / dead time
+	return (anim.get_animation(clip).length - from) / maxf(speed, 0.01)
 
 
 func busy() -> bool:

@@ -15,7 +15,42 @@ const ATTACKS := {
 	"hook": {"clip": &"Melee_Hook", "damage": 15.0, "start": 0.26, "end": 0.44, "range": 1.9, "push": 6.0, "speed": 1.25, "heavy": true},
 	"charge": {"clip": &"Shield_Dash_RM", "damage": 18.0, "start": 0.12, "end": 0.45, "range": 2.0, "push": 11.0, "speed": 1.2, "heavy": true, "lunge": 9.0},
 }
-const COMBO := ["jab", "cross", "hook"]
+const COMBO := ["jab", "cross", "hook", "uppercut", "roundhouse"]
+## Heavy moves used up close (picked in turn); from range it's the charge.
+const HEAVIES := ["front_kick", "haymaker", "knee", "elbow", "low_kick", "spin_kick"]
+## Generated moves (tools/gen_motion.sh, MoMask text-to-motion): name ->
+## [clip, damage, push, heavy]. Timing comes from fight_gen.json (the
+## moment of furthest reach = when the hit lands).
+const GENERATED := {
+	"uppercut": [&"Fx_Uppercut", 14.0, 4.0, false],
+	"roundhouse": [&"Fx_Roundhouse", 20.0, 9.0, true],
+	"front_kick": [&"Fx_FrontKick", 17.0, 10.0, true],
+	"haymaker": [&"Fx_Haymaker", 19.0, 7.0, true],
+	"knee": [&"Fx_Knee", 16.0, 5.0, true],
+	"elbow": [&"Fx_Elbow", 15.0, 5.0, false],
+	"low_kick": [&"Fx_LowKick", 12.0, 3.0, false],
+	"spin_kick": [&"Fx_SpinKick", 24.0, 12.0, true],
+	"stomp": [&"Fx_Stomp", 22.0, 0.0, true],
+}
+const GEN_SPEED := 1.45
+const GEN_LEAD := 0.42        # seconds of the clip played before the hit lands
+static var _timing: Dictionary = {}
+var _heavy_step := 0
+
+
+## An attack entry for a generated move, trimmed around its hit frame.
+static func generated_attack(kind: String) -> Dictionary:
+	if _timing.is_empty():
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string("res://assets/animations/fight_gen.json"))
+		_timing = parsed if parsed is Dictionary else {"_": 0}
+	var g: Array = GENERATED[kind]
+	var info: Dictionary = _timing.get(String(g[0]), {"peak": 1.0, "length": 2.0})
+	var peak: float = info["peak"]
+	var from := maxf(peak - GEN_LEAD, 0.0)
+	var lead := (peak - from) / GEN_SPEED
+	return {"clip": g[0], "damage": g[1], "push": g[2], "heavy": g[3], "speed": GEN_SPEED, "from": from,
+		"start": maxf(lead - 0.07, 0.02), "end": lead + 0.1, "range": 2.0 if str(g[0]).contains("Kick") else 1.8,
+		"max_length": lead + 0.32}
 
 @export var max_health := 100.0
 var health := 100.0
@@ -182,11 +217,21 @@ func heavy() -> void:
 	if not can_act():
 		return
 	_combo_step = 0
-	_start_attack("charge")
+	var foe := _face_target()
+	if foe and foe.global_position.distance_to(global_position) < 2.4:
+		if foe.is_down():
+			_start_attack("stomp")
+		else:
+			_start_attack(HEAVIES[_heavy_step % HEAVIES.size()])
+			_heavy_step += 1
+	else:
+		_start_attack("charge")
 
 
 func _start_attack(kind: String) -> void:
-	_attack = ATTACKS[kind].duplicate()
+	if GENERATED.has(kind) and not body.has(GENERATED[kind][0]):
+		kind = "hook"      # (clip missing: fall back to a library move)
+	_attack = generated_attack(kind) if GENERATED.has(kind) else ATTACKS[kind].duplicate()
 	_attack["kind"] = kind
 	_attack_hit = []
 	_set_state(State.ATTACK)
@@ -194,9 +239,9 @@ func _start_attack(kind: String) -> void:
 	if foe and foe.global_position.distance_to(global_position) < 4.0:
 		var d := foe.global_position - global_position
 		rotation.y = atan2(d.x, d.z)
-	var length := body.one_shot(_attack["clip"], float(_attack["speed"]))
-	_attack["length"] = minf(length, 0.75)
-	Sfx.play("whoosh", global_position + Vector3.UP, -8.0, 1.2 if kind == "jab" else 0.9)
+	var length := body.one_shot(_attack["clip"], float(_attack["speed"]), 0.08, float(_attack.get("from", 0.0)))
+	_attack["length"] = minf(length, float(_attack.get("max_length", 0.75)))
+	Sfx.play("whoosh", global_position + Vector3.UP, -8.0, 1.2 if kind == "jab" else (0.7 if _attack.get("heavy", false) else 0.9))
 
 
 func _tick_attack(delta: float) -> void:
@@ -351,6 +396,17 @@ func respawn(at: Vector3) -> void:
 	_set_state(State.FREE)
 	body.cancel_one_shot()
 	body.play(&"Idle", 0.0, 1.0, true)
+
+
+## Show off after a knockout.
+func celebrate() -> void:
+	if alive and state == State.FREE and body.has(&"Fx_Flex"):
+		var info: Dictionary = _timing.get("Fx_Flex", {"peak": 1.0})
+		body.one_shot(&"Fx_Flex", 1.2, 0.15, maxf(float(info["peak"]) - 1.2, 0.0))
+		_set_state(State.DODGE)       # a short, safe window (ends like a dodge)
+		_state_time = -0.9
+		velocity.x = 0.0
+		velocity.z = 0.0
 
 
 func is_down() -> bool:

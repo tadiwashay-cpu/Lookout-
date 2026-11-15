@@ -1,0 +1,142 @@
+{
+ "Fx_BodyHook": {
+  "length": 9.75,
+  "peak": 9.8,
+  "limb": "LeftHand",
+  "reach": 0.631,
+  "travel": 0.793
+ },
+ "Fx_Duck": {
+  "length": 2.75,
+  "peak": 0.3,
+  "limb": "RightHand",
+  "reach": 0.323,
+  "travel": 1.049
+ },
+ "Fx_Elbow": {
+  "length": 4.95,
+  "peak": 2.35,
+  "limb": "RightHand",
+  "reach": 0.447,
+  "travel": 0.926
+ },
+ "Fx_FallBack": {
+  "length": 9.75,
+  "peak": 3.65,
+  "limb": "RightFoot",
+  "reach": 0.68,
+  "travel": 3.136
+ },
+ "Fx_Flex": {
+  "length": 8.55,
+  "peak": 8.35,
+  "limb": "LeftHand",
+  "reach": 0.523,
+  "travel": 0.09
+ },
+ "Fx_FlyingKnee": {
+  "length": 9.75,
+  "peak": 9.6,
+  "limb": "LeftFoot",
+  "reach": 0.503,
+  "travel": 12.422
+ },
+ "Fx_FrontKick": {
+  "length": 7.95,
+  "peak": 2.55,
+  "limb": "RightFoot",
+  "reach": 0.575,
+  "travel": 0.764
+ },
+ "Fx_Guard": {
+  "length": 9.75,
+  "peak": 1.1,
+  "limb": "RightHand",
+  "reach": 0.35,
+  "travel": 0.874
+ },
+ "Fx_Haymaker": {
+  "length": 7.55,
+  "peak": 2.0,
+  "limb": "LeftHand",
+  "reach": 0.408,
+  "travel": 1.18
+ },
+ "Fx_Knee": {
+  "length": 5.35,
+  "peak": 1.4,
+  "limb": "RightFoot",
+  "reach": 0.576,
+  "travel": 0.32
+ },
+ "Fx_LowKick": {
+  "length": 3.95,
+  "peak": 1.2,
+  "limb": "LeftFoot",
+  "reach": 0.69,
+  "travel": 0.138
+ },
+ "Fx_OneTwo": {
+  "length": 2.75,
+  "peak": 2.2,
+  "limb": "LeftHand",
+  "reach": 0.368,
+  "travel": 0.125
+ },
+ "Fx_Roundhouse": {
+  "length": 3.55,
+  "peak": 1.4,
+  "limb": "RightFoot",
+  "reach": 0.75,
+  "travel": 0.537
+ },
+ "Fx_Shove": {
+  "length": 2.35,
+  "peak": 0.3,
+  "limb": "RightFoot",
+  "reach": 0.381,
+  "travel": 2.94
+ },
+ "Fx_Slam": {
+  "length": 9.75,
+  "peak": 7.5,
+  "limb": "RightHand",
+  "reach": 0.657,
+  "travel": 1.198
+ },
+ "Fx_SpinKick": {
+  "length": 9.55,
+  "peak": 4.95,
+  "limb": "LeftFoot",
+  "reach": 0.835,
+  "travel": 1.721
+ },
+ "Fx_Stomp": {
+  "length": 9.55,
+  "peak": 8.6,
+  "limb": "RightFoot",
+  "reach": 0.865,
+  "travel": 0.241
+ },
+ "Fx_Stumble": {
+  "length": 7.95,
+  "peak": 3.15,
+  "limb": "RightHand",
+  "reach": 0.309,
+  "travel": 1.574
+ },
+ "Fx_Taunt": {
+  "length": 1.95,
+  "peak": 0.7,
+  "limb": "LeftHand",
+  "reach": 0.274,
+  "travel": 0.06
+ },
+ "Fx_Uppercut": {
+  "length": 2.35,
+  "peak": 1.2,
+  "limb": "RightHand",
+  "reach": 0.299,
+  "travel": 0.184
+ }
+}
