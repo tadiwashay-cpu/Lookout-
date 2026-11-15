@@ -105,6 +105,7 @@ func _ready() -> void:
 	body.name = "Body"
 	add_child(body)
 	body.setup(model_path, model_height)
+	body.play(&"Idle", 0.0)          # never a T-pose, even before the first step
 	health = max_health
 
 

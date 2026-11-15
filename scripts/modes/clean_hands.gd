@@ -67,6 +67,9 @@ func _countdown() -> void:
 	player.controls_enabled = false
 	for b in _bots:
 		b.set_physics_process(false)
+		b.body.play(&"Punch_Enter", 0.2)     # squared up, waiting for the bell
+		var d := ring.global_position - b.global_position
+		b.rotation.y = atan2(d.x, d.z)
 	for n in [3, 2, 1]:
 		hud.banner(str(n), "CLEAN HANDS", 0.8)
 		Sfx.play("beep")
