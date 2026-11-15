@@ -24,6 +24,7 @@ var sync: NetSync
 var _finish_order: Array = []
 var _gate: MeshInstance3D
 var _net_tick := 0.0
+var _last_pos := 0
 
 
 func begin() -> void:
@@ -166,6 +167,16 @@ func _track(r: Dictionary) -> void:
 	if best < route.size() / 4 and start > route.size() * 3 / 4 and int(r.get("max", 0)) > route.size() * 0.6:
 		r["max"] = 0
 		r["lap"] = int(r["lap"]) + 1
+		if car == my_car:
+			# Across the line: sparks off the car, paper on the last lap.
+			Fx.sparks(world, car.global_position + Vector3.UP * 0.6, Color(1.0, 0.85, 0.4))
+			Sfx.play("go")
+			var hud: Hud = world.get("hud")
+			if int(r["lap"]) >= laps:
+				Fx.confetti(world, car.global_position + Vector3.UP * 2.0, 140)
+				hud.popup("FINISH!", Color(1.0, 0.8, 0.25), 72)
+			else:
+				hud.popup("LAP %d / %d" % [int(r["lap"]) + 1, laps], Color(0.5, 0.9, 1.0))
 		if int(r["lap"]) >= laps:
 			r["done"] = true
 			r["time"] = race_time
@@ -194,6 +205,11 @@ func _update_hud() -> void:
 		if list[i]["id"] == Net.my_id():
 			me = i
 	var mine: Dictionary = racers[0]
+	if _last_pos > 0 and me + 1 < _last_pos and race_time > 3.0 and not mine["done"]:
+		hud.popup("%s PLACE" % ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH", "7TH", "8TH"][mini(me, 7)], Color(1.0, 0.85, 0.3), 44)
+		if my_car:
+			Fx.sparks(world, my_car.global_position + Vector3.UP * 0.6, Color(1.0, 0.9, 0.5))
+	_last_pos = me + 1
 	var lap := mini(int(mine["lap"]) + 1, laps)
 	hud.set_race(me + 1, list.size(), lap, laps, race_time, grenades, surge)
 	if mine["done"] and running:

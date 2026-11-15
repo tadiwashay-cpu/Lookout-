@@ -12,6 +12,11 @@ instincts beyond decades of military training. He wants revenge on the men
 who jumped him, and on his father. *(Story missions come after the career
 and multiplayer.)*
 
+**Current version: 0.3.0 (playtest build).** What changed: [CHANGELOG.md](CHANGELOG.md).
+Testing with friends: [docs/PLAYTEST.md](docs/PLAYTEST.md). An installable APK is
+built automatically on every push (GitHub > Releases > "Lookout v0.3.0
+(playtest)").
+
 ## What's in it now
 - **Open world, 2.4 km square**: downtown grid, harbour and sea, suburbs,
   forest hills, a mountain range with a pass road. Everything is joined by

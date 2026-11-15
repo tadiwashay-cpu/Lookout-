@@ -1,6 +1,8 @@
 extends Node
-## Sound effects synthesised at start-up (no audio files to ship): punches,
-## impacts, whooshes, the power surge, explosions, beeps and an engine loop.
+## Sound effects. Impacts, explosions, crashes, the bell and the engine are
+## recorded CC0 sounds from assets/sounds (several takes each, picked at
+## random so repeated hits never sound identical); whooshes, the surge,
+## beeps, tyres and the crowd are synthesised at start-up.
 
 const RATE := 22050
 
@@ -23,6 +25,38 @@ func _ready() -> void:
 	streams["skid"] = _noise_loop(0.6, 0.25)
 	streams["bell"] = _bell(1.4)
 	streams["crowd"] = _noise_loop(1.5, 0.12)
+	streams["cash"] = _chime([1318.5, 1760.0], 0.09)
+	streams["click"] = _tone(0.04, 1400.0)
+	streams["horn"] = _horn(0.45)
+	streams["land"] = _impact(0.1, 160.0, 0.6)
+	streams["scrape"] = _impact(0.16, 1800.0, 0.5)
+	_load_recorded()
+
+
+## Recorded takes replace the synthesised stand-ins where a file exists:
+## assets/sounds/<name>.wav or <name>_1.wav, <name>_2.wav...
+func _load_recorded() -> void:
+	for sound: String in ["punch", "heavy", "block", "explosion", "crash", "scrape", "bell", "door", "click", "land"]:
+		var takes: Array = []
+		var single := "res://assets/sounds/%s.wav" % sound
+		if ResourceLoader.exists(single):
+			takes.append(load(single))
+		for i in range(1, 8):
+			var path := "res://assets/sounds/%s_%d.wav" % [sound, i]
+			if not ResourceLoader.exists(path):
+				break
+			takes.append(load(path))
+		if not takes.is_empty():
+			streams[sound] = takes
+	var loop := "res://assets/sounds/engine_loop.wav"
+	if ResourceLoader.exists(loop):
+		var src := load(loop) as AudioStreamWAV
+		if src:
+			var w := src.duplicate() as AudioStreamWAV
+			w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			w.loop_begin = 0
+			w.loop_end = int(w.get_length() * w.mix_rate)
+			streams["engine"] = w
 
 
 ## One-shot sound, 3D at `pos` if given.
@@ -43,7 +77,10 @@ func play(sound: String, pos: Variant = null, volume_db: float = 0.0, pitch: flo
 	else:
 		player = AudioStreamPlayer.new()
 		tree.current_scene.add_child(player)
-	player.set("stream", streams[sound])
+	var stream = streams[sound]
+	if stream is Array:
+		stream = stream[_rng.randi() % (stream as Array).size()]
+	player.set("stream", stream)
 	player.set("volume_db", volume_db)
 	player.set("pitch_scale", pitch * _rng.randf_range(0.94, 1.06))
 	player.call("play")
@@ -126,6 +163,29 @@ func _tone(length: float, hz: float) -> AudioStreamWAV:
 	for i in n:
 		var t := float(i) / RATE
 		s[i] = sin(TAU * hz * t) * 0.5 * minf(1.0, (length - t) * 20.0)
+	return _wav(s)
+
+
+func _chime(notes: Array, each: float) -> AudioStreamWAV:
+	var n := int(each * notes.size() * RATE + 0.25 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for k in notes.size():
+		var start := int(k * each * RATE)
+		for i in range(start, n):
+			var t := float(i - start) / RATE
+			s[i] += sin(TAU * float(notes[k]) * t) * exp(-t * 14.0) * 0.4
+	return _wav(s)
+
+
+func _horn(length: float) -> AudioStreamWAV:
+	var n := int(length * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var env := minf(minf(t * 60.0, 1.0), (length - t) * 30.0)
+		s[i] = (signf(sin(TAU * 392.0 * t)) * 0.18 + signf(sin(TAU * 494.0 * t)) * 0.18 + sin(TAU * 196.0 * t) * 0.2) * env
 	return _wav(s)
 
 

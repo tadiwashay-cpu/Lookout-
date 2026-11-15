@@ -17,7 +17,7 @@ const ATTACKS := {
 }
 const COMBO := ["jab", "cross", "hook", "uppercut", "roundhouse"]
 ## Heavy moves used up close (picked in turn); from range it's the charge.
-const HEAVIES := ["front_kick", "haymaker", "knee", "elbow", "low_kick", "spin_kick"]
+const HEAVIES := ["front_kick", "haymaker", "knee", "elbow", "low_kick"]
 ## Generated moves (tools/gen_motion.sh, MoMask text-to-motion): name ->
 ## [clip, damage, push, heavy]. Timing comes from fight_gen.json (the
 ## moment of furthest reach = when the hit lands).
@@ -29,7 +29,6 @@ const GENERATED := {
 	"knee": [&"Fx_Knee", 16.0, 5.0, true],
 	"elbow": [&"Fx_Elbow", 15.0, 5.0, false],
 	"low_kick": [&"Fx_LowKick", 12.0, 3.0, false],
-	"spin_kick": [&"Fx_SpinKick", 24.0, 12.0, true],
 	"stomp": [&"Fx_Stomp", 22.0, 0.0, true],
 }
 const GEN_SPEED := 1.45
@@ -84,6 +83,9 @@ var _stagger_meter := 0.0
 var alive := true
 var in_car := false
 var _foot_speed := 0.0
+var aim_assist := 0.0           # 0..1: how forgiving hits are (Nash: 1)
+var _air_time := 0.0            # seconds since the feet left the ground
+var _fall_speed := 0.0
 
 
 func _ready() -> void:
@@ -171,9 +173,24 @@ func _physics_process(delta: float) -> void:
 			velocity.x = _knock.x
 			velocity.z = _knock.z
 			_knock = _knock.move_toward(Vector3.ZERO, delta * 10.0)
+	if not is_on_floor():
+		_fall_speed = maxf(_fall_speed, -velocity.y)
 	move_and_slide()
+	if is_on_floor():
+		if _air_time > 0.25 and _fall_speed > 7.0:
+			_landed(_fall_speed)
+		_air_time = 0.0
+		_fall_speed = 0.0
+	else:
+		_air_time += delta
 	_foot_speed = Vector2(velocity.x, velocity.z).length()
 	_animate()
+
+
+## Feet hit the ground after a real drop.
+func _landed(speed: float) -> void:
+	Fx.dust(get_parent(), global_position + Vector3.UP * 0.1, clampf(speed / 12.0, 0.6, 1.6))
+	Sfx.play("land", global_position, clampf(speed - 14.0, -10.0, 0.0))
 
 
 func _animate() -> void:
@@ -238,7 +255,13 @@ func _start_attack(kind: String) -> void:
 	var foe := _face_target()
 	if foe and foe.global_position.distance_to(global_position) < 4.0:
 		var d := foe.global_position - global_position
+		d.y = 0.0
 		rotation.y = atan2(d.x, d.z)
+		# A swing from slightly too far steps in to connect (near misses
+		# are no fun), but never teleports.
+		var gap := d.length() - (float(_attack["range"]) - 0.35)
+		if gap > 0.0 and not _attack.has("lunge"):
+			_attack["lunge"] = clampf(gap / maxf(float(_attack["start"]), 0.08), 1.6, 5.0 + 4.0 * aim_assist)
 	var length := body.one_shot(_attack["clip"], float(_attack["speed"]), 0.08, float(_attack.get("from", 0.0)))
 	_attack["length"] = minf(length, float(_attack.get("max_length", 0.75)))
 	Sfx.play("whoosh", global_position + Vector3.UP, -8.0, 1.2 if kind == "jab" else (0.7 if _attack.get("heavy", false) else 0.9))
@@ -359,10 +382,14 @@ func dodge(dir: Vector3) -> void:
 	Sfx.play("whoosh", global_position, -6.0, 0.8)
 
 
-func jump() -> void:
-	if can_act() and is_on_floor():
+func jump() -> bool:
+	# "Coyote time": a jump pressed just after running off an edge counts.
+	if can_act() and (is_on_floor() or (_air_time < 0.14 and velocity.y <= 0.5)):
 		velocity.y = jump_velocity
+		_air_time = 1.0
 		body.one_shot(&"Jump_Start", 1.2)
+		return true
+	return false
 
 
 ## Power surge: everyone around is blasted away.

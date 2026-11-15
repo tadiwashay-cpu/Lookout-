@@ -21,6 +21,12 @@ func begin() -> void:
 		var face: Vector3 = b["face"]
 		var along := face.cross(Vector3.UP)
 		var pos := door + face * 4.0 + along * _rng.randf_range(-8, 8) + Vector3.UP * 0.6
+		var crowded := false
+		for other in get_tree().get_nodes_in_group(&"cars"):
+			if (other as Node3D).position.distance_to(pos) < 7.0:
+				crowded = true
+		if crowded or pos.distance_to(Layout.PLAYER_START) < 9.0:
+			continue
 		var id: String = CarCatalog.STREET_CARS[_rng.randi() % CarCatalog.STREET_CARS.size()]
 		if _rng.randf() < 0.08:
 			id = CarCatalog.RACE_CARS[_rng.randi() % CarCatalog.RACE_CARS.size()]
@@ -47,7 +53,11 @@ func begin() -> void:
 			b.set_meta(&"hustler", true)
 			world.add_child(b)
 			b.add_to_group(&"hustlers")
-	(world.get("hud") as Hud).banner("LOOKOUT", "Free roam  •  ENTER near a car to drive  •  find the services", 4.0)
+	var traffic := Traffic.new()
+	traffic.name = "Traffic"
+	traffic.world = world
+	world.add_child(traffic)
+	(world.get("hud") as Hud).banner("LOOKOUT", "Free roam  •  ENTER near a car to drive  •  tap the radar for the map", 4.0)
 
 
 func _process(delta: float) -> void:

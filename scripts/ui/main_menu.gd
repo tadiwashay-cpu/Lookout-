@@ -13,6 +13,30 @@ func _ready() -> void:
 	bg.color = Color(0.03, 0.035, 0.04)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	# Key art on the right, fading into the dark panel on the left.
+	var art := TextureRect.new()
+	art.texture = load("res://assets/ui/menu_bg.jpg")
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(art)
+	var shade := TextureRect.new()
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	grad.colors = PackedColorArray([Color(0.02, 0.025, 0.03, 0.97), Color(0.02, 0.025, 0.03, 0.82), Color(0.02, 0.025, 0.03, 0.15)])
+	var gt := GradientTexture2D.new()
+	gt.gradient = grad
+	shade.texture = gt
+	shade.stretch_mode = TextureRect.STRETCH_SCALE
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(shade)
+	var ver := Label.new()
+	ver.text = "v%s  %s build" % [Game.version(), Game.BUILD_NAME]
+	ver.add_theme_font_size_override("font_size", 22)
+	ver.modulate = Color(1, 1, 1, 0.7)
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	Hud.pin(ver, Vector2(1.0, 1.0), Vector2(-420, -44), Vector2(400, 30))
+	add_child(ver)
 	var stripe := ColorRect.new()
 	stripe.color = Color(1.0, 0.5, 0.08)
 	stripe.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
@@ -37,8 +61,10 @@ func _ready() -> void:
 	add_child(_panel)
 	_status = Label.new()
 	_status.add_theme_font_size_override("font_size", 24)
-	_status.position = Vector2(1180, 270)
-	_status.size = Vector2(390, 560)
+	_status.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_status.add_theme_constant_override("outline_size", 8)
+	_status.position = Vector2(900, 270)
+	_status.size = Vector2(660, 560)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD
 	add_child(_status)
 	Net.players_changed.connect(_refresh_lobby)
@@ -59,7 +85,9 @@ func _button(text: String, action: Callable, size: int = 34) -> Button:
 	b.custom_minimum_size = Vector2(0, 74)
 	b.add_theme_font_size_override("font_size", size)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.pressed.connect(action)
+	b.pressed.connect(func() -> void:
+		Sfx.play("click")
+		action.call())
 	_panel.add_child(b)
 	return b
 
@@ -72,6 +100,54 @@ func _home() -> void:
 	_button("CLEAN HANDS  —  ring brawl", func() -> void: _mode_menu(Game.Mode.CLEAN_HANDS))
 	_button("STREET RACE  —  up to 8", func() -> void: _mode_menu(Game.Mode.RACE))
 	_button("SETTINGS", _settings)
+	_button("HOW TO PLAY", _how_to, 28)
+	_button("PLAYTEST REPORT", _report, 28)
+
+
+func _how_to() -> void:
+	_clear()
+	_status.text = ""
+	var text := Label.new()
+	text.text = "\n".join([
+		"ON FOOT   left side of the screen: move (push all the way to sprint)   •   drag the right side: look",
+		"PUNCH  tap again and again for a 5-hit combo",
+		"HEAVY  big moves up close, a charge from range, a stomp on a downed fighter, a FINISHER on a dazed one",
+		"BLOCK  hold it and face them   •   DODGE  roll through a hit   •   SURGE  blast everyone around you (needs half a bar)",
+		"ENTER  get in the nearest car, use doors and counters",
+		"",
+		"DRIVING   left side: steer   •   GAS / BRAKE (brake also reverses)   •   DRIFT for bends   •   NITRO on straights",
+		"RACES   GRENADE lobs one ahead, SURGE stuns cars next to you. A wrecked car respawns where it died.",
+		"",
+		"MAP   tap the round radar.     MULTIPLAYER   everyone on the same Wi-Fi: one player HOSTS, the rest JOIN.",
+		"Gamepad and keyboard work too (WASD, J punch, K heavy, L block, Space jump, E enter).",
+	])
+	text.add_theme_font_size_override("font_size", 23)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD
+	text.custom_minimum_size = Vector2(1300, 0)
+	_panel.add_child(text)
+	_button("BACK", _home, 28)
+
+
+## What testers send back: device, frame rates per session, version.
+func _report() -> void:
+	_clear()
+	_status.add_theme_font_size_override("font_size", 19)
+	_status.text = Game.report_text()
+	var note := Label.new()
+	note.text = "Play each mode for a minute, then come back here.\nCOPY puts this report on the clipboard: paste it into a chat or notes, and add what felt good, what felt bad and what broke."
+	note.add_theme_font_size_override("font_size", 22)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD
+	note.custom_minimum_size = Vector2(740, 0)
+	_panel.add_child(note)
+	_button("COPY REPORT", func() -> void:
+		DisplayServer.clipboard_set(Game.report_text())
+		note.text = "Copied. Paste it wherever you're collecting feedback.")
+	_button("CLEAR SESSIONS", func() -> void:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Game.REPORT_PATH))
+		_status.text = Game.report_text(), 28)
+	_button("BACK", func() -> void:
+		_status.add_theme_font_size_override("font_size", 24)
+		_home(), 28)
 
 
 func _mode_menu(mode: int) -> void:
@@ -203,9 +279,11 @@ func _settings() -> void:
 	_option_row_settings("GRAPHICS", ["LOW", "MEDIUM", "HIGH", "ULTRA"], Game.quality, func(i: int) -> void: Game.set_quality(i))
 	_option_row_settings("FPS COUNTER", ["OFF", "ON"], 1 if Game.show_fps else 0, func(i: int) -> void: Game.show_fps = i == 1)
 	var note := Label.new()
-	note.text = "Resolution adapts automatically to hold 60 fps (it only drops while a scene is heavy)."
+	note.text = "The game holds 60 fps by itself: resolution adapts while a scene is heavy, and if that isn't enough it switches off one effect at a time and remembers it for this device. Picking a GRAPHICS level resets that."
 	note.add_theme_font_size_override("font_size", 20)
 	note.modulate = Color(1, 1, 1, 0.6)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD
+	note.custom_minimum_size = Vector2(740, 0)
 	_panel.add_child(note)
 	_button("SAVE", func() -> void: Game.save(); _home())
 

@@ -21,12 +21,26 @@ var rng := RandomNumberGenerator.new()
 var _lamp_pool: Array[OmniLight3D] = []
 var _lamp_tick := 0.0
 var _cull_tick := 0.0
+var built := false
 
 
 func _ready() -> void:
 	add_to_group(&"world")
+	await _build()
+
+
+## Loading-screen stage: update the bar and let a frame draw. Without a
+## loading screen (dev tools) the world builds in one go.
+func _stage(text: String, fraction: float) -> void:
+	if Game.loading_active():
+		Game.loading_step(text, fraction)
+		await get_tree().process_frame
+
+
+func _build() -> void:
 	var seed_value := 20261112        # the map is the same for everyone
 	rng.seed = int(Game.match_config.get("seed", 1))
+	await _stage("Shaping the land", 0.08)
 	Terrain.setup(seed_value)
 	Game.apply_viewport(get_viewport())
 	_environment()
@@ -34,11 +48,15 @@ func _ready() -> void:
 	roads.build_paths()
 	Terrain.roads = roads
 	Terrain.build(self)
+	await _stage("Laying roads", 0.3)
 	roads.build_meshes(self)
+	await _stage("Raising the city", 0.42)
 	city = City.new(self, seed_value)
 	city.build()
+	await _stage("Suburbs, harbour and forest", 0.6)
 	regions = Regions.new(self, seed_value)
 	regions.build(roads)
+	await _stage("Opening the shops", 0.74)
 	services = Services.new(self)
 	services.build(city)
 	ring = Ring.new()
@@ -47,9 +65,30 @@ func _ready() -> void:
 	add_child(ring)
 	ring.build()
 	_street_light_pool()
+	await _stage("Waking Nash up", 0.86)
 	_spawn_player()
 	_ui()
+	await _stage("Almost there", 0.95)
 	_start_mode()
+	Game.tune_changed.connect(_apply_tune)
+	built = true
+	if Game.loading_active():
+		# Compile the effect shaders behind the loading screen (no hitch on
+		# the first punch), then lift the curtain.
+		Fx.prewarm(self, cam)
+		for i in 4:
+			await get_tree().process_frame
+		Game.loading_step("Go", 1.0)
+		Game.loading_end()
+	Game.call("_session_begin")
+
+
+## The auto-tuner dropped an effect: apply it live.
+func _apply_tune() -> void:
+	env.glow_enabled = Game.glow_on()
+	var shadow := Game.shadow_distance()
+	sun.shadow_enabled = shadow > 0.0
+	sun.directional_shadow_max_distance = maxf(shadow, 1.0)
 
 
 func _environment() -> void:
@@ -70,7 +109,7 @@ func _environment() -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 0.85
 	env.tonemap_white = 6.0
-	env.glow_enabled = bool(Game.preset()["glow"])
+	env.glow_enabled = Game.glow_on()
 	env.set_glow_level(0, 0.0)
 	env.set_glow_level(1, 0.0)
 	env.set_glow_level(2, 1.0)
@@ -90,7 +129,7 @@ func _environment() -> void:
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = true
-	var shadow: float = Game.preset()["shadow"]
+	var shadow := Game.shadow_distance()
 	sun.shadow_enabled = shadow > 0.0
 	sun.directional_shadow_max_distance = maxf(shadow, 1.0)
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if Game.quality >= 3 else DirectionalLight3D.SHADOW_ORTHOGONAL
@@ -155,6 +194,8 @@ func _street_light_pool() -> void:
 
 
 func _process(delta: float) -> void:
+	if not built:
+		return
 	Game.govern_resolution(get_viewport(), delta)
 	_cull_tick -= delta
 	if _cull_tick <= 0.0:

@@ -104,6 +104,11 @@ func _on_ko(victim: Fighter, attacker: Fighter) -> void:
 	var by := attacker.fighter_id if attacker else -1
 	if attacker and is_instance_valid(attacker):
 		attacker.celebrate()
+	# Paper in the air for every KO; a big one when it's yours.
+	Fx.confetti(world, victim.global_position + Vector3.UP * 1.2, 80 if attacker == player else 36)
+	if attacker == player:
+		(world.get("hud") as Hud).popup("KNOCKOUT!  +1", Color(1.0, 0.8, 0.25))
+		Game.slowmo(0.4, 0.25)
 	Net.send_event("ko", {"victim": victim.fighter_id, "by": by})
 	var spot := ring.corner(randi() % 8)
 	await get_tree().create_timer(3.0).timeout
@@ -126,6 +131,7 @@ func _on_event(_from: int, kind: String, d: Dictionary) -> void:
 func _finish() -> void:
 	player.controls_enabled = false
 	Sfx.play("bell")
+	Fx.confetti(world, ring.global_position + Vector3.UP * 3.0, 160)
 	var ids := kos.keys()
 	ids.sort_custom(func(a, b) -> bool: return kos[a] > kos[b])
 	var rows: Array = []

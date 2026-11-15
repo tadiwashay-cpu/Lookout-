@@ -133,3 +133,61 @@ static func plume(parent_node: Node3D, offset: Vector3, fire: bool) -> CPUPartic
 	p.position = offset
 	parent_node.add_child(p)
 	return p
+
+
+## Score! A burst of coloured paper that flutters down.
+static func confetti(parent: Node, pos: Vector3, amount: int = 60) -> void:
+	if parent == null:
+		return
+	_materials()
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.explosiveness = 0.9
+	p.amount = amount
+	p.lifetime = 2.2
+	p.direction = Vector3.UP
+	p.spread = 55.0
+	p.initial_velocity_min = 5.0
+	p.initial_velocity_max = 11.0
+	p.gravity = Vector3.DOWN * 7.0
+	p.damping_min = 1.5
+	p.damping_max = 3.0
+	p.angular_velocity_min = -400.0
+	p.angular_velocity_max = 400.0
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.1
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.16, 0.1)
+	quad.material = _spark_mat
+	p.mesh = quad
+	var colors := Gradient.new()
+	colors.offsets = PackedFloat32Array([0.0, 0.25, 0.5, 0.75, 1.0])
+	colors.colors = PackedColorArray([Color(1.0, 0.55, 0.1), Color(0.3, 0.8, 1.0), Color(1.0, 0.9, 0.3), Color(0.95, 0.3, 0.5), Color(0.5, 1.0, 0.5)])
+	p.color_initial_ramp = colors
+	var fade := Gradient.new()
+	fade.offsets = PackedFloat32Array([0.0, 0.8, 1.0])
+	fade.colors = PackedColorArray([Color.WHITE, Color.WHITE, Color(1, 1, 1, 0)])
+	p.color_ramp = fade
+	parent.add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+
+
+## A puff where feet or tyres hit the ground.
+static func dust(parent: Node, pos: Vector3, size: float = 1.0) -> void:
+	_materials()
+	_burst(parent, pos, 10, Color(0.75, 0.72, 0.66, 0.5), 2.5 * size, 2.2 * size, 0.6, -0.5, _smoke_mat)
+
+
+## Draw every effect once, tiny and far below the camera, so their shaders
+## are compiled before the first real punch (no first-hit stutter).
+static func prewarm(parent: Node, cam: Node3D) -> void:
+	if parent == null or cam == null:
+		return
+	var at := cam.global_position - cam.global_basis.z * 6.0 + Vector3.DOWN * 3.0
+	sparks(parent, at, Color(1, 1, 1, 0.02))
+	dust(parent, at, 0.2)
+	confetti(parent, at, 6)
+	_burst(parent, at, 4, Color(1.0, 0.55, 0.15, 0.02), 1.0, 0.5, 0.3, 0.0, _spark_mat)
+	_burst(parent, at, 4, Color(0.1, 0.1, 0.1, 0.02), 1.0, 0.5, 0.3, 0.0, _smoke_mat)

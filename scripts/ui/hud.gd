@@ -40,6 +40,7 @@ func _ready() -> void:
 	_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_radar = Radar.new()
 	_radar.position = Vector2(24, 24)
+	_radar.tapped.connect(open_map)
 	_root.add_child(_radar)
 	_health = _bar(Vector2(24, 286), Color(0.85, 0.15, 0.12))
 	_surge = _bar(Vector2(24, 304), Color(0.3, 0.75, 1.0))
@@ -72,6 +73,12 @@ func _ready() -> void:
 	_root.add_child(pause)
 	_fader = _rect(Color(0, 0, 0, 0))
 	_fader.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Build stamp: every screenshot a tester sends says which version it is.
+	var stamp := _label(16, HORIZONTAL_ALIGNMENT_LEFT)
+	stamp.text = "LOOKOUT v%s" % Game.version()
+	stamp.modulate = Color(1, 1, 1, 0.45)
+	pin(stamp, Vector2(0.0, 1.0), Vector2(14, -28), Vector2(300, 22))
+	Game.money_changed.connect(_on_money)
 
 
 ## Pin `c` to a point of the screen (anchor 0..1) with an offset and size.
@@ -137,7 +144,8 @@ func _process(delta: float) -> void:
 		if _fps_label == null:
 			_fps_label = _label(20, HORIZONTAL_ALIGNMENT_RIGHT)
 			pin(_fps_label, Vector2(1.0, 0.0), Vector2(-420, 84), Vector2(320, 26))
-		_fps_label.text = "%d FPS  •  %d%% res" % [Engine.get_frames_per_second(), int(Game.render_scale * 100.0)]
+		_fps_label.text = "%d FPS  •  %dp%s" % [Engine.get_frames_per_second(), int(Game.render_scale * get_window().size.y),
+			("  •  tune %d" % Game.tune_stage) if Game.tune_stage > 0 else ""]
 	if player == null:
 		return
 	_health.value = player.health / player.max_health * 100.0
@@ -171,6 +179,56 @@ func banner(text: String, sub: String = "", seconds: float = 2.0) -> void:
 	_banner.scale = Vector2.ONE * 1.25
 	_banner.pivot_offset = _banner.size * 0.5
 	create_tween().tween_property(_banner, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+
+
+## A score pops up mid-screen, swells, drifts up and fades ("+1 KO", "+$500").
+func popup(text: String, color: Color = Color(1.0, 0.85, 0.3), size: int = 56) -> void:
+	var l := _label(size, HORIZONTAL_ALIGNMENT_CENTER)
+	l.text = text
+	l.add_theme_color_override("font_color", color)
+	var slot := _popups % 3
+	_popups += 1
+	pin(l, Vector2(0.5, 0.5), Vector2(-400, -40 + slot * 64), Vector2(800, 70))
+	l.pivot_offset = Vector2(400, 35)
+	l.scale = Vector2.ONE * 0.4
+	var tw := l.create_tween()
+	tw.tween_property(l, "scale", Vector2.ONE * 1.15, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.1)
+	tw.tween_interval(0.7)
+	tw.set_parallel(true)
+	tw.tween_property(l, "position:y", l.position.y - 70.0, 0.5)
+	tw.tween_property(l, "modulate:a", 0.0, 0.5)
+	tw.chain().tween_callback(l.queue_free)
+
+
+var _popups := 0
+
+
+func _on_money(amount: int) -> void:
+	popup(("+$%d" % amount) if amount > 0 else ("-$%d" % -amount), Color(0.45, 1.0, 0.5) if amount > 0 else Color(1.0, 0.45, 0.4), 44)
+	Sfx.play("cash")
+
+
+# ------------------------------------------------------------- full map
+
+var _map: MapView
+
+
+func open_map() -> void:
+	if _map or world == null:
+		return
+	_map = MapView.new()
+	_map.world = world
+	_map.player = player
+	_map.closed.connect(close_map)
+	_root.add_child(_map)
+	Sfx.play("click")
+
+
+func close_map() -> void:
+	if _map:
+		_map.queue_free()
+		_map = null
 
 
 func set_top(text: String, sub: String = "") -> void:
@@ -291,6 +349,13 @@ func _pause_menu() -> void:
 	open_menu("PAUSED", func() -> Array:
 		return [
 			["Cash: $%d" % Game.money, "", Callable()],
+			["World map", "OPEN", func() -> void: _close_menu.call_deferred(); open_map.call_deferred()],
+			["FPS counter", "ON" if Game.show_fps else "OFF", func() -> void:
+				Game.show_fps = not Game.show_fps
+				if _fps_label:
+					_fps_label.visible = Game.show_fps
+				Game.save()],
+			["Lookout v%s  •  %s graphics" % [Game.version(), Game.preset()["name"]], "", Callable()],
 			["Back to the main menu", "QUIT", func() -> void: Game.back_to_menu()],
 		])
 
@@ -347,9 +412,16 @@ class Radar:
 	const R := 120.0
 	const RANGE := 260.0
 
+	signal tapped
+
 	func _ready() -> void:
 		size = Vector2(R * 2.0, R * 2.0)
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mouse_filter = Control.MOUSE_FILTER_STOP
+
+	func _gui_input(event: InputEvent) -> void:
+		if (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed):
+			tapped.emit()
+			accept_event()
 
 	var _tick := 0.0
 
@@ -390,6 +462,10 @@ class Radar:
 			var m: Vector2 = to_map.call(car.global_position)
 			if m.distance_to(c) < R and car != player.car:
 				draw_circle(m, 5.0, Color(1.0, 0.3, 0.2))
+		for node in get_tree().get_nodes_in_group(&"traffic"):
+			var tm: Vector2 = to_map.call((node as Node3D).global_position)
+			if tm.distance_to(c) < R:
+				draw_circle(tm, 3.5, Color(0.8, 0.8, 0.8, 0.8))
 		for node in get_tree().get_nodes_in_group(&"fighters"):
 			var f := node as Fighter
 			if f == player or f.is_in_group(&"civilians") or not f.alive:
@@ -407,3 +483,106 @@ class Radar:
 			var p1 := a.lerp(b, float(i + 1) / steps)
 			if p0.distance_to(c) < R and p1.distance_to(c) < R:
 				draw_line(p0, p1, Color(0.6, 0.6, 0.58), 5.0)
+
+
+# ============================================================== full map
+
+class MapView:
+	extends Control
+	## The whole world, north up: regions, every road, the services, the
+	## ring and where you are. Tap anywhere to close.
+	signal closed
+	var world: Node3D
+	var player: Player
+	var _t := 0.0
+
+	func _ready() -> void:
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		modulate.a = 0.0
+		create_tween().tween_property(self, "modulate:a", 1.0, 0.15)
+
+	func _gui_input(event: InputEvent) -> void:
+		if (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed):
+			accept_event()
+			closed.emit()
+
+	func _process(d: float) -> void:
+		_t += d
+		queue_redraw()
+
+	func _draw() -> void:
+		var font := ThemeDB.fallback_font
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.03, 0.04, 0.93))
+		var side := minf(size.x, size.y) - 84.0
+		var origin := size * 0.5 + Vector2(0, 18)
+		var k := side / (Layout.HALF * 2.0)
+		var to_map := func(x: float, z: float) -> Vector2:
+			return origin + Vector2(x, z) * k
+		var rect := func(r: Rect2) -> Rect2:
+			return Rect2(origin + r.position * k, r.size * k)
+		var land := Rect2(-Layout.HALF, -Layout.HALF, Layout.HALF * 2.0, Layout.HALF * 2.0)
+		draw_rect(rect.call(land), Color(0.2, 0.3, 0.19))
+		# Mountains across the north, sea down the east side.
+		draw_rect(rect.call(Rect2(-Layout.HALF, -Layout.HALF, Layout.HALF * 2.0, 620.0)), Color(0.33, 0.33, 0.31))
+		for i in 9:
+			var mx := -1050.0 + i * 235.0
+			var peak: Vector2 = to_map.call(mx, -1010.0 + (i % 3) * 90.0)
+			draw_colored_polygon(PackedVector2Array([peak, peak + Vector2(46, 62) * k * 3.2, peak + Vector2(-46, 62) * k * 3.2]), Color(0.46, 0.46, 0.45))
+			draw_colored_polygon(PackedVector2Array([peak, peak + Vector2(14, 19) * k * 3.2, peak + Vector2(-14, 19) * k * 3.2]), Color(0.9, 0.92, 0.95))
+		draw_rect(rect.call(Layout.FOREST_RECT), Color(0.1, 0.22, 0.12))
+		draw_rect(rect.call(Layout.SUBURB_RECT), Color(0.36, 0.4, 0.3))
+		draw_rect(rect.call(Layout.CITY_RECT), Color(0.3, 0.31, 0.34))
+		draw_rect(rect.call(Layout.HARBOUR_RECT), Color(0.37, 0.34, 0.3))
+		draw_rect(rect.call(Rect2(Layout.SHORE_X, -Layout.HALF, Layout.HALF - Layout.SHORE_X, Layout.HALF * 2.0)), Color(0.1, 0.25, 0.42))
+		draw_rect(rect.call(land), Color(1, 1, 1, 0.25), false, 2.0)
+		# Roads.
+		for x: float in Layout.CITY_X:
+			draw_line(to_map.call(x, Layout.CITY_Z[0]), to_map.call(x, Layout.CITY_Z[Layout.CITY_Z.size() - 1]), Color(0.62, 0.62, 0.6), 2.0)
+		for z: float in Layout.CITY_Z:
+			draw_line(to_map.call(Layout.CITY_X[0], z), to_map.call(Layout.CITY_X[Layout.CITY_X.size() - 1], z), Color(0.62, 0.62, 0.6), 2.0)
+		var roads: Roads = world.get("roads")
+		for road_name in roads.paths:
+			var pts: Array = roads.paths[road_name]
+			var line := PackedVector2Array()
+			for i in range(0, pts.size(), 3):
+				line.append(to_map.call(pts[i].x, pts[i].z))
+			line.append(to_map.call(pts[pts.size() - 1].x, pts[pts.size() - 1].z))
+			draw_polyline(line, Color(0.95, 0.93, 0.85), 3.5, true)
+		# Region names.
+		for item in [["MOUNTAINS", Vector2(-200, -1080)], ["THE CITY", Vector2(-40, -420)], ["HARBOUR", Vector2(470, -420)], ["SUBURBS", Vector2(-860, -300)],
+				["FOREST", Vector2(-640, 700)], ["SEA", Vector2(900, 0)], ["COAST HIGHWAY", Vector2(-300, -800)]]:
+			var at: Vector2 = to_map.call(item[1].x, item[1].y)
+			draw_string(font, at, item[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.55))
+		# Services and the ring.
+		var services: Services = world.get("services")
+		for kind: String in services.doors:
+			var d: Vector3 = services.doors[kind]
+			var m: Vector2 = to_map.call(d.x, d.z)
+			var c: Color = Services.KINDS[kind]["color"]
+			draw_circle(m, 9.0, Color(0, 0, 0, 0.7))
+			draw_circle(m, 6.5, c)
+			draw_string(font, m + Vector2(12, 6), Services.KINDS[kind]["title"], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, c)
+		var ring_at: Vector2 = to_map.call(Layout.RING_CENTER.x, Layout.RING_CENTER.z)
+		draw_rect(Rect2(ring_at - Vector2(8, 8), Vector2(16, 16)), Color(0.95, 0.25, 0.2))
+		draw_rect(Rect2(ring_at - Vector2(8, 8), Vector2(16, 16)), Color.WHITE, false, 2.0)
+		draw_string(font, ring_at + Vector2(14, 6), "CLEAN HANDS RING", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(1.0, 0.5, 0.45))
+		# Cars someone is driving, then you (pulsing).
+		for node in get_tree().get_nodes_in_group(&"cars"):
+			var car := node as Car
+			if (car.driver == null and not car.ai_enabled and car.owner_peer == 0) or car == player.car:
+				continue
+			draw_circle(to_map.call(car.global_position.x, car.global_position.z), 4.0, Color(1.0, 0.35, 0.25))
+		var focus: Node3D = player.car if player.car else player
+		var p := focus.global_position
+		if p.y > Services.DEPTH * 0.5:
+			var me: Vector2 = to_map.call(clampf(p.x, -Layout.HALF, Layout.HALF), clampf(p.z, -Layout.HALF, Layout.HALF))
+			var f := focus.global_basis.z
+			var heading := Vector2(f.x, f.z).normalized()
+			var right := Vector2(-heading.y, heading.x)
+			draw_circle(me, 14.0 + sin(_t * 5.0) * 4.0, Color(0.3, 0.8, 1.0, 0.25))
+			draw_colored_polygon(PackedVector2Array([me + heading * 15.0, me - heading * 9.0 + right * 9.0, me - heading * 9.0 - right * 9.0]), Color(0.3, 0.85, 1.0))
+		else:
+			draw_string(font, origin + Vector2(-side * 0.5, side * 0.5 + 26.0), "You're inside a building.", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.3, 0.85, 1.0))
+		draw_string(font, Vector2(origin.x - side * 0.5, origin.y - side * 0.5 - 16.0), "WORLD MAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1.0, 0.55, 0.12))
+		draw_string(font, Vector2(origin.x + side * 0.5 - 250.0, origin.y - side * 0.5 - 16.0), "N ↑     tap to close", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.6))

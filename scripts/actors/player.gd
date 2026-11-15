@@ -14,11 +14,14 @@ var _fight_target: Fighter
 var _was_blocking := false
 var _finisher_time := 0.0
 var controls_enabled := true
+var _buffer := &""                # an action pressed a moment too early
+var _buffer_time := 0.0
 
 
 func _ready() -> void:
 	model_path = Humanoid.NASH
 	max_health = 160.0
+	aim_assist = 1.0
 	super._ready()
 	display_name = Game.player_name
 	add_to_group(&"player")
@@ -77,21 +80,41 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _read_actions() -> void:
-	if Input.is_action_just_pressed("punch"):
-		punch()
-	if Input.is_action_just_pressed("heavy"):
-		if finisher_target and finisher_target.finishable() and finisher_target.global_position.distance_to(global_position) < 2.6:
-			finisher(finisher_target)
-		else:
-			heavy()
+	# Buttons pressed a moment too early (mid-stagger, mid-roll, just before
+	# landing) are remembered for a quarter second instead of being eaten.
+	_buffer_time -= get_physics_process_delta_time()
+	for action: StringName in [&"punch", &"heavy", &"jump", &"dodge"]:
+		if Input.is_action_just_pressed(action):
+			_buffer = action
+			_buffer_time = 0.25
+	if _buffer != &"" and _buffer_time > 0.0:
+		var done := false
+		match _buffer:
+			&"punch":
+				if can_act() or (state == State.ATTACK and _state_time > float(_attack.get("start", 0.0))):
+					punch()
+					done = true
+			&"heavy":
+				if can_act():
+					if finisher_target and finisher_target.finishable() and finisher_target.global_position.distance_to(global_position) < 2.6:
+						finisher(finisher_target)
+					else:
+						heavy()
+					done = true
+			&"jump":
+				done = jump()
+			&"dodge":
+				if can_act():
+					dodge(_wants_move())
+					done = true
+		if done:
+			_buffer = &""
+	elif _buffer_time <= 0.0:
+		_buffer = &""
 	var blocking := Input.is_action_pressed("block")
 	if blocking != _was_blocking:
 		block(blocking)
 		_was_blocking = blocking
-	if Input.is_action_just_pressed("dodge"):
-		dodge(_wants_move())
-	if Input.is_action_just_pressed("jump"):
-		jump()
 	if Input.is_action_just_pressed("surge"):
 		power_surge()
 	if Input.is_action_just_pressed("interact"):
@@ -129,9 +152,9 @@ func _update_camera_mode() -> void:
 func _land_hit(target: Fighter, attack: Dictionary) -> void:
 	super._land_hit(target, attack)
 	var heavy := bool(attack.get("heavy", false))
-	CameraRig.shake_all(0.45 if heavy else 0.18)
-	if heavy:
-		Game.hitstop(0.07)
+	CameraRig.shake_all(0.45 if heavy else 0.2)
+	CameraRig.kick_all(global_basis.z, 0.22 if heavy else 0.09)
+	Game.hitstop(0.075 if heavy else 0.03)       # every hit bites; heavy ones bite harder
 
 
 func receive_hit(damage: float, push: Vector3, attacker: Fighter, heavy: bool) -> void:
@@ -139,6 +162,8 @@ func receive_hit(damage: float, push: Vector3, attacker: Fighter, heavy: bool) -
 	super.receive_hit(damage, push, attacker, heavy)
 	if health < before:
 		CameraRig.shake_all(0.35 if heavy else 0.15)
+		if push.length() > 0.1:
+			CameraRig.kick_all(push, 0.18 if heavy else 0.07)
 		var hud := get_tree().get_first_node_in_group(&"hud")
 		if hud:
 			hud.call("damage_flash", clampf((before - health) / 30.0, 0.2, 1.0))
@@ -156,8 +181,8 @@ func finisher(target: Fighter) -> void:
 		cam.cinema((global_position + target.global_position) * 0.5, 2.0)
 	Game.slowmo(0.35, 0.55)
 	Sfx.play("surge", global_position, -2.0, 1.4)
-	# Knee to fold them, uppercut to stand them up, spinning kick to send them.
-	var seq := [["knee", 0.0], ["uppercut", 0.3], ["spin_kick", 0.62]]
+	# Knee to fold them, uppercut to stand them up, roundhouse to send them.
+	var seq := [["knee", 0.0], ["uppercut", 0.3], ["roundhouse", 0.62]]
 	for step in seq:
 		var move := Fighter.generated_attack(step[0])
 		var lead := float(move["start"])
@@ -169,7 +194,7 @@ func finisher(target: Fighter) -> void:
 		t.timeout.connect(func() -> void:
 			if not is_instance_valid(target):
 				return
-			var last: bool = step[0] == "spin_kick"
+			var last: bool = step[0] == "roundhouse"
 			var dmg := target.health + 5.0 if last and target.health < target.max_health * 0.35 else (8.0 if not last else 40.0)
 			target.receive_hit(dmg, global_basis.z * (16.0 if last else 1.0) + (Vector3.UP * 6.0 if last else Vector3.ZERO), self, last)
 			CameraRig.shake_all(1.2 if last else 0.4)
@@ -182,6 +207,13 @@ func finisher(target: Fighter) -> void:
 		if state == State.FINISHER:
 			_set_state(State.FREE)
 			body.cancel_one_shot())
+
+
+func _landed(speed: float) -> void:
+	super._landed(speed)
+	CameraRig.dip_all(clampf(speed * 0.02, 0.1, 0.35))
+	if speed > 13.0:
+		CameraRig.shake_all(0.25)
 
 
 # --------------------------------------------------------------- vehicles

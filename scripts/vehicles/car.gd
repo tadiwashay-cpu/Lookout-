@@ -116,7 +116,7 @@ func _build() -> void:
 		var xf := _rel(_body_mesh)
 		var shape := BoxShape3D.new()
 		var size := (xf.basis.get_scale() * box.size).abs()
-		shape.size = Vector3(size.x * 0.92, size.y * 0.55, size.z * 0.95)
+		shape.size = Vector3(size.x * 0.88, size.y * 0.55, size.z * 0.94)     # a touch slimmer than it looks: near misses stay misses
 		var col := CollisionShape3D.new()
 		col.shape = shape
 		add_child(col)
@@ -138,16 +138,21 @@ func _rel(node: Node3D) -> Transform3D:
 
 
 func _repaint(color: Color) -> void:
+	paint_mesh(_body_mesh, color)
+
+
+## Recolour a car body's paint surfaces (also used by traffic).
+static func paint_mesh(body_mesh: MeshInstance3D, color: Color) -> void:
 	var shader := load("res://assets/shaders/car_paint.gdshader") as Shader
-	for s in _body_mesh.mesh.get_surface_count():
-		var mat := _body_mesh.get_active_material(s) as StandardMaterial3D
+	for s in body_mesh.mesh.get_surface_count():
+		var mat := body_mesh.get_active_material(s) as StandardMaterial3D
 		if mat == null or not (mat.resource_name.to_lower().contains("body") or mat.resource_name.to_lower().contains("paint")):
 			continue
 		var sm := ShaderMaterial.new()
 		sm.shader = shader
 		sm.set_shader_parameter("albedo_tex", mat.albedo_texture)
 		sm.set_shader_parameter("paint_color", color)
-		_body_mesh.set_surface_override_material(s, sm)
+		body_mesh.set_surface_override_material(s, sm)
 
 
 func set_driver(d: Node) -> void:
@@ -336,11 +341,26 @@ func _read_player() -> void:
 
 func _on_hit(other: Node) -> void:
 	var dv := (_last_v - linear_velocity).length()
-	if dv > 6.0:
-		take_damage((dv - 6.0) * 22.0)
-		Sfx.play("crash", global_position, clampf(dv - 12.0, -12.0, 6.0))
+	if other.has_method("traffic_hit"):
+		other.call("traffic_hit", self, dv)
+	# Forgive the near miss: a scrape or a clipped corner (a small change
+	# of speed) gives most of the speed back and costs no damage. Only real
+	# impacts hurt.
+	if dv > 1.0 and dv < 8.0 and (driver or ai_enabled) and _last_v.length() > 8.0:
+		var keep := _last_v.length() * 0.92
+		if linear_velocity.length() < keep and linear_velocity.length() > 1.0:
+			linear_velocity = linear_velocity.normalized() * lerpf(linear_velocity.length(), keep, 0.6)
 		if driver:
-			CameraRig.shake_all(clampf(dv / 25.0, 0.1, 0.9))
+			CameraRig.shake_all(0.12)
+			Fx.sparks(get_parent(), global_position + Vector3.UP * 0.4, Color(1.0, 0.85, 0.5))
+			Sfx.play("scrape", global_position, -8.0)
+	if dv >= 8.0:
+		take_damage((dv - 8.0) * 24.0)
+		Sfx.play("crash", global_position, clampf(dv - 12.0, -12.0, 6.0))
+		Fx.sparks(get_parent(), global_position + Vector3.UP * 0.5, Color(1.0, 0.8, 0.4))
+		if driver:
+			CameraRig.shake_all(clampf(dv / 25.0, 0.15, 0.9))
+			CameraRig.kick_all(_last_v, clampf(dv / 40.0, 0.1, 0.5))
 	if other is Car and dv > 4.0:
 		(other as Car).take_damage((dv - 4.0) * 10.0)
 

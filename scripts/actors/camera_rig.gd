@@ -25,6 +25,10 @@ var _smooth_pos := Vector3.ZERO
 var _rng := RandomNumberGenerator.new()
 var _car_yaw := 0.0
 var base_fov := 70.0
+var _pivot := Vector3.ZERO        # trails the target a little (weight)
+var _pivot_set := false
+var _kick := Vector3.ZERO         # one-off shove from a hit, springs back
+var _dip := 0.0                   # landing dip
 
 
 func _ready() -> void:
@@ -41,6 +45,17 @@ func _exit_tree() -> void:
 static func shake_all(amount: float) -> void:
 	for c in _all:
 		c._shake = minf(c._shake + amount, 2.0)
+
+
+## Shove every camera a little in `dir` (a punch that connects, a crash).
+static func kick_all(dir: Vector3, amount: float) -> void:
+	for c in _all:
+		c._kick += dir.normalized() * amount
+
+
+static func dip_all(amount: float) -> void:
+	for c in _all:
+		c._dip = maxf(c._dip, amount)
 
 
 static func shake_at(pos: Vector3, amount: float) -> void:
@@ -69,12 +84,26 @@ func _process(delta: float) -> void:
 	var look_at_pos: Vector3
 	match mode:
 		Mode.FOOT:
-			var pivot := target.global_position + Vector3.UP * 1.6
+			# The pivot follows Nash with a short delay and leans a little
+			# into where he's running, so speed reads as speed.
+			var lead := Vector3.ZERO
+			if target is Fighter:
+				var v := (target as Fighter).velocity
+				lead = Vector3(v.x, 0, v.z) * 0.07
+			var goal := target.global_position + Vector3.UP * 1.6 + lead
+			if not _pivot_set or _pivot.distance_to(goal) > 12.0:
+				_pivot = goal
+				_pivot_set = true
+			_pivot.x = lerpf(_pivot.x, goal.x, clampf(real_dt * 9.0, 0.0, 1.0))
+			_pivot.z = lerpf(_pivot.z, goal.z, clampf(real_dt * 9.0, 0.0, 1.0))
+			_pivot.y = lerpf(_pivot.y, goal.y, clampf(real_dt * 6.0, 0.0, 1.0))
+			var pivot := _pivot
 			var dir := Vector3(sin(yaw) * cos(pitch), -sin(pitch), cos(yaw) * cos(pitch))
 			want_pos = pivot + dir * distance + global_basis.x * 0.0
 			want_pos = _avoid_walls(pivot, want_pos)
 			look_at_pos = pivot + Vector3.UP * 0.1
-			fov = lerpf(fov, base_fov + (8.0 if target is Fighter and (target as Fighter)._foot_speed > 9.0 else 0.0), real_dt * 4.0)
+			var run := clampf(((target as Fighter)._foot_speed - 6.0) / 6.0, 0.0, 1.0) if target is Fighter else 0.0
+			fov = lerpf(fov, base_fov + 10.0 * run, real_dt * 3.0)
 		Mode.FIGHT:
 			var a := target.global_position
 			var b := opponent.global_position if opponent and is_instance_valid(opponent) else a + target.global_basis.z * 2.0
@@ -97,9 +126,12 @@ func _process(delta: float) -> void:
 			var vel := car.linear_velocity
 			var speed := vel.length()
 			var heading := atan2(car.global_basis.z.x, car.global_basis.z.z)
-			_car_yaw = lerp_angle(_car_yaw, heading, clampf(real_dt * 5.0, 0.0, 1.0))
+			_car_yaw = lerp_angle(_car_yaw, heading, clampf(real_dt * 4.2, 0.0, 1.0))
 			var behind := -Vector3(sin(_car_yaw + yaw), 0, cos(_car_yaw + yaw))
-			want_pos = car.global_position + behind * (6.2 + speed * 0.02) + Vector3.UP * (2.1 + pitch * -2.0)
+			# The faster the car, the further the camera hangs back (and
+			# further still on nitro): acceleration you can see.
+			var back := 6.0 + clampf(speed * 0.045, 0.0, 2.6) + (0.9 if car.get("nitro_on") else 0.0)
+			want_pos = car.global_position + behind * back + Vector3.UP * (2.1 + pitch * -2.0)
 			look_at_pos = car.global_position + Vector3.UP * 1.0 + car.global_basis.z * 3.0
 			fov = lerpf(fov, base_fov + clampf(speed * 0.35, 0.0, 22.0) + (8.0 if car.get("nitro_on") else 0.0), real_dt * 3.0)
 			yaw = lerpf(yaw, 0.0, real_dt * 1.5)
@@ -111,7 +143,7 @@ func _process(delta: float) -> void:
 			fov = lerpf(fov, 48.0, real_dt * 4.0)
 			if _cinema_time <= 0.0:
 				mode = Mode.FOOT
-	_smooth_pos = _smooth_pos.lerp(want_pos, clampf(real_dt * (14.0 if mode == Mode.CAR else 10.0), 0.0, 1.0))
+	_smooth_pos = _smooth_pos.lerp(want_pos, clampf(real_dt * (11.0 if mode == Mode.CAR else 12.0), 0.0, 1.0))
 	if _smooth_pos.distance_to(want_pos) > 30.0:
 		_smooth_pos = want_pos
 	var shake_offset := Vector3.ZERO
@@ -119,7 +151,9 @@ func _process(delta: float) -> void:
 		var s := _shake * _shake * 0.25
 		shake_offset = Vector3(_rng.randf_range(-s, s), _rng.randf_range(-s, s), _rng.randf_range(-s, s))
 		_shake = maxf(_shake - real_dt * 2.5, 0.0)
-	global_position = _smooth_pos + shake_offset
+	_kick = _kick.lerp(Vector3.ZERO, clampf(real_dt * 9.0, 0.0, 1.0))
+	_dip = lerpf(_dip, 0.0, clampf(real_dt * 7.0, 0.0, 1.0))
+	global_position = _smooth_pos + shake_offset + _kick + Vector3.DOWN * _dip
 	if global_position.distance_to(look_at_pos) > 0.1:
 		look_at(look_at_pos + shake_offset * 0.5, Vector3.UP)
 

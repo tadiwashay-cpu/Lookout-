@@ -46,6 +46,7 @@ static func travel(p: Player, to: Vector3, yaw: float) -> void:
 	if _busy:
 		return
 	_busy = true
+	Sfx.play("door", null, -4.0)
 	var hud := p.get_tree().get_first_node_in_group(&"hud")
 	if hud:
 		await hud.call("fade", true)

@@ -32,8 +32,19 @@ licensed code) through its public Hugging Face demo.
 `assets/props/` (decimated), tree impostors in `assets/trees/` rendered from
 `fir_sapling_medium`.
 
-## Sound
-All sound effects are synthesised in `scripts/core/sfx.gd`.
+## Sound (CC0)
+Recorded effects in `assets/sounds/`, all CC0 from OpenGameArt.org:
+- punches, heavy hits, blocks: **"37 hits/punches"** by Independent.nu (submitted by qubodup)
+- crashes, scrapes, bell, door, click, landing: **"100 CC0 SFX"** by rubberduck
+- explosions: **"25 CC0 bang / firework SFX"** by rubberduck
+- engine loop: **"Racing car engine sound loops"** by domasx2
+
+Whooshes, the surge, beeps, the horn, tyres and the crowd are synthesised in
+`scripts/core/sfx.gd`.
+
+## Key art
+Loading screen and menu background (`assets/ui/`) generated with ForgeGUI
+from the author's own Nash design.
 
 ## Engine
 Made with **Godot Engine** (MIT licence).
