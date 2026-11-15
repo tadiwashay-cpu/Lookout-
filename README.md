@@ -13,7 +13,7 @@ who jumped him, and on his father. *(Story missions come after the career
 and multiplayer.)*
 
 **Current version: 0.3.0 (playtest build).** What changed: [CHANGELOG.md](CHANGELOG.md).
-Testing with friends: [docs/PLAYTEST.md](docs/PLAYTEST.md). An installable APK is
+Testing with friends: [docs/PLAYTEST.md](docs/PLAYTEST.md). Fixing and editing in the Godot app yourself: [docs/EDITOR_GUIDE.md](docs/EDITOR_GUIDE.md). An installable APK is
 built automatically on every push (GitHub > Releases > "Lookout v0.3.0
 (playtest)").
 
